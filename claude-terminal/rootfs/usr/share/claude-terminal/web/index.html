@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Terminal · Home Assistant</title>
+<style>
+/* ─── Reset & Variables ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #0f1117;
+  --surface:  #1a1d2e;
+  --surface2: #242740;
+  --border:   #2e3150;
+  --accent:   #6c63ff;
+  --accent2:  #03a9f4;
+  --success:  #4caf50;
+  --warning:  #ff9800;
+  --danger:   #f44336;
+  --text:     #e0e0f0;
+  --muted:    #7c7fa0;
+  --radius:   10px;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+/* ─── Layout ────────────────────────────────────────────────── */
+body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 16px; height: 46px; min-height: 46px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.topbar .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--accent); }
+.topbar .logo svg { width: 22px; height: 22px; }
+.tab-bar { display: flex; gap: 2px; flex: 1; }
+.tab { padding: 6px 16px; border-radius: 6px; cursor: pointer; color: var(--muted); transition: all .15s; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.tab:hover { background: var(--surface2); color: var(--text); }
+.tab.active { background: var(--accent); color: #fff; }
+.tab svg { width: 14px; height: 14px; }
+
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ─── Panel izquierdo (editor de planos) ─────────────────────── */
+.panel-left {
+  display: flex; flex-direction: column;
+  width: 340px; min-width: 260px; max-width: 420px;
+  border-right: 1px solid var(--border);
+  background: var(--surface); overflow: hidden;
+  resize: horizontal;
+}
+.panel-section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.panel-section-title { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+
+/* ─── Zona de trabajo ─────────────────────────────────────────── */
+.workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+/* ─── Tabs content ───────────────────────────────────────────── */
+.tab-content { display: none; flex: 1; overflow: hidden; }
+.tab-content.active { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
+
+/* ─── Editor de planos ───────────────────────────────────────── */
+.floorplan-editor { display: flex; flex: 1; overflow: hidden; }
+
+.canvas-wrap {
+  flex: 1; position: relative; overflow: auto;
+  background: repeating-conic-gradient(#1a1d2e 0% 25%, #16182a 0% 50%) 0 0 / 20px 20px;
+  display: flex; align-items: center; justify-content: center;
+}
+.canvas-wrap.dragover { outline: 3px dashed var(--accent); outline-offset: -4px; }
+
+#floorplan-canvas {
+  position: relative; cursor: crosshair;
+  box-shadow: 0 8px 40px #00000088;
+  user-select: none;
+}
+#floorplan-canvas img {
+  display: block; width: 100%; height: 100%;
+  object-fit: contain; pointer-events: none;
+  border-radius: 4px;
+}
+.drop-hint {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 14px; color: var(--muted); pointer-events: none;
+}
+.drop-hint svg { width: 52px; height: 52px; opacity: .3; }
+.drop-hint p { font-size: 14px; opacity: .6; }
+.drop-hint.hidden { display: none; }
+
+/* ─── Pin sobre el plano ─────────────────────────────────────── */
+.pin {
+  position: absolute; transform: translate(-50%, -50%);
+  cursor: pointer; transition: transform .1s;
+  filter: drop-shadow(0 2px 4px #0008);
+  z-index: 10;
+}
+.pin:hover { transform: translate(-50%, -50%) scale(1.25); }
+.pin.selected { filter: drop-shadow(0 0 6px var(--accent)) drop-shadow(0 2px 4px #0008); }
+.pin-inner {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid rgba(255,255,255,.25);
+  font-size: 15px; position: relative;
+}
+.pin-label {
+  position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+  background: #000b; color: #fff; padding: 2px 6px; border-radius: 4px;
+  font-size: 10px; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .15s;
+}
+.pin:hover .pin-label, .pin.selected .pin-label { opacity: 1; }
+
+/* ─── Sidebar de propiedades ─────────────────────────────────── */
+.props-panel {
+  width: 230px; min-width: 210px;
+  background: var(--surface); border-left: 1px solid var(--border);
+  overflow-y: auto; display: flex; flex-direction: column;
+}
+.props-panel .empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: var(--muted); gap: 10px; padding: 20px; text-align: center;
+}
+.props-panel .empty-state svg { width: 40px; height: 40px; opacity: .25; }
+
+/* ─── Terminal ───────────────────────────────────────────────── */
+#tab-terminal { flex: 1; }
+#terminal-frame { width: 100%; height: 100%; border: none; background: #000; display: block; }
+
+/* ─── Formulario de propiedades ──────────────────────────────── */
+.form-group { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.form-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; display: block; }
+.form-input {
+  width: 100%; padding: 6px 9px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); font-size: 12px; transition: border-color .15s;
+}
+.form-input:focus { outline: none; border-color: var(--accent); }
+.form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath fill='%237c7fa0' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px; }
+.form-row { display: flex; gap: 8px; }
+.form-row .form-group { flex: 1; padding: 10px 0 10px 14px; }
+.form-row .form-group:first-child { padding-left: 14px; }
+.form-row .form-group:last-child { padding-right: 14px; }
+.color-swatch { width: 26px; height: 26px; border-radius: 4px; border: 2px solid var(--border); cursor: pointer; padding: 0; }
+
+/* ─── Botones ─────────────────────────────────────────────────── */
+.btn { padding: 7px 14px; border-radius: 7px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; white-space: nowrap; }
+.btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #7b74ff; }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); }
+.btn-danger { background: #f443361a; color: var(--danger); border: 1px solid #f4433644; }
+.btn-danger:hover { background: #f4433333; }
+.btn-success { background: #4caf501a; color: var(--success); border: 1px solid #4caf5044; }
+.btn-success:hover { background: #4caf5033; }
+.btn-sm { padding: 4px 9px; font-size: 11px; }
+.btn-icon { padding: 6px; border-radius: 6px; }
+
+/* ─── Búsqueda de entidades ──────────────────────────────────── */
+.entity-search-wrap { position: relative; }
+.entity-search-wrap input { width: 100%; }
+.entity-suggestions {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-top: none; border-radius: 0 0 8px 8px;
+  max-height: 180px; overflow-y: auto; display: none;
+}
+.entity-suggestions.open { display: block; }
+.entity-suggestion {
+  padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.entity-suggestion:hover { background: var(--border); }
+.entity-suggestion .eid { font-size: 11px; color: var(--text); }
+.entity-suggestion .ename { font-size: 10px; color: var(--muted); }
+
+/* ─── Lista de planos ────────────────────────────────────────── */
+.floorplan-list { display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; }
+.floorplan-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 7px; cursor: pointer; border: 1px solid transparent;
+  transition: all .12s;
+}
+.floorplan-item:hover { background: var(--surface2); }
+.floorplan-item.active { border-color: var(--accent); background: #6c63ff15; }
+.floorplan-item .fi-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.floorplan-item .fi-del { color: var(--danger); opacity: 0; transition: opacity .1s; flex-shrink: 0; }
+.floorplan-item:hover .fi-del { opacity: 1; }
+
+/* ─── Upload zone ─────────────────────────────────────────────── */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: 10px;
+  padding: 14px; text-align: center; cursor: pointer;
+  transition: all .15s; color: var(--muted); font-size: 12px;
+}
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); color: var(--accent); background: #6c63ff0d; }
+.upload-zone input { display: none; }
+
+/* ─── YAML Modal ─────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: #00000099; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; backdrop-filter: blur(4px);
+}
+.modal-overlay.hidden { display: none; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); width: 100%; max-width: 680px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 20px 80px #0009; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 700; }
+.modal-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.yaml-output {
+  flex: 1; padding: 16px; font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px; background: #090c14; color: #a8ff78; border: none; resize: none;
+  outline: none; overflow-y: auto; min-height: 280px;
+}
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+
+/* ─── Toolbar del editor ─────────────────────────────────────── */
+.editor-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.editor-toolbar .sep { width: 1px; height: 24px; background: var(--border); }
+.type-pill { padding: 4px 10px; border-radius: 20px; cursor: pointer; font-size: 11px; font-weight: 600; border: 1.5px solid var(--border); color: var(--muted); transition: all .12s; display: flex; align-items: center; gap: 4px; }
+.type-pill:hover { border-color: var(--accent); color: var(--text); }
+.type-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ─── Status bar ─────────────────────────────────────────────── */
+.statusbar { padding: 3px 14px; background: var(--surface); border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); display: flex; gap: 16px; }
+.statusbar .s-item { display: flex; align-items: center; gap: 4px; }
+.statusbar .s-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+.statusbar .s-dot.off { background: var(--muted); }
+
+/* ─── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ─── Toast ──────────────────────────────────────────────────── */
+.toast-container { position: fixed; bottom: 30px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 500;
+  box-shadow: 0 4px 20px #0006; animation: slideIn .2s ease;
+  display: flex; align-items: center; gap: 8px; min-width: 200px;
+}
+.toast.success { background: #1b3a1d; color: #81c784; border: 1px solid #4caf5055; }
+.toast.error   { background: #3a1b1b; color: #e57373; border: 1px solid #f4433655; }
+.toast.info    { background: #1a1d3a; color: #90caf9; border: 1px solid #2196f355; }
+@keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<!-- ─── Top bar ──────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Claude HA
+  </div>
+  <nav class="tab-bar">
+    <button class="tab active" data-tab="floorplan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h6M3 15h6M15 9h6M15 15h6"/></svg>
+      Editor de Planos
+    </button>
+    <button class="tab" data-tab="terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Claude Terminal
+    </button>
+  </nav>
+  <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+    <span id="ha-status" class="btn btn-sm btn-secondary" style="cursor:default">
+      <span class="s-dot off" id="ha-dot"></span> Conectando…
+    </span>
+  </div>
+</header>
+
+<!-- ─── Main ─────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- ─── Tab: Editor de Planos ──────────────────────────────── -->
+  <div id="tab-floorplan" class="tab-content active" style="display:flex;flex:1;overflow:hidden;">
+
+    <!-- Panel izquierdo -->
+    <aside class="panel-left">
+
+      <!-- Subir planos -->
+      <div class="panel-section">
+        <div class="panel-section-title">Planos</div>
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="file-input" accept="image/*" multiple>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:28px;height:28px;margin:0 auto 6px;display:block;opacity:.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          <div>Arrastra imágenes aquí</div>
+          <div style="margin-top:4px;font-size:10px;opacity:.5">o haz clic para seleccionar</div>
+        </div>
+        <div class="floorplan-list" id="floorplan-list" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- Tipo de elemento a añadir -->
+      <div class="panel-section">
+        <div class="panel-section-title">Añadir elemento (clic en el plano)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <button class="type-pill active" data-type="state-icon">
+            <svg viewBox="0 0 16 16" fill="currentColor" style="width:10px;height:10px"><circle cx="8" cy="8" r="6"/></svg>Icono
+          </button>
+          <button class="type-pill" data-type="state-badge">
+            <svg viewBox="0 0 16 16" fill="currentColor" style="width:10px;height:10px"><rect x="2" y="2" width="12" height="12" rx="3"/></svg>Estado
+          </button>
+          <button class="type-pill" data-type="label">
+            <svg viewBox="0 0 16 16" fill="currentColor" style="width:10px;height:10px"><rect x="2" y="6" width="12" height="4" rx="1"/></svg>Etiqueta
+          </button>
+          <button class="type-pill" data-type="service-button">
+            <svg viewBox="0 0 16 16" fill="currentColor" style="width:10px;height:10px"><rect x="2" y="4" width="12" height="8" rx="2"/></svg>Botón
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista de pins -->
+      <div class="panel-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div class="panel-section-title" style="margin-bottom:0">Elementos (<span id="pin-count">0</span>)</div>
+          <button class="btn btn-sm btn-danger" id="clear-pins-btn" title="Eliminar todos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+          </button>
+        </div>
+        <div id="pin-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:3px;"></div>
+      </div>
+
+      <!-- Acciones -->
+      <div class="panel-section" style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn btn-primary" id="export-yaml-btn" style="width:100%;justify-content:center;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Exportar YAML de Lovelace
+        </button>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" id="save-layout-btn" style="flex:1;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+            Guardar
+          </button>
+          <button class="btn btn-secondary btn-sm" id="load-layout-btn" style="flex:1;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Cargar
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Editor canvas + props -->
+    <div class="floorplan-editor" style="flex:1;overflow:hidden;">
+      <!-- Toolbar -->
+      <div class="editor-toolbar">
+        <span style="font-size:11px;color:var(--muted);">Plano:</span>
+        <strong id="current-floorplan-name" style="font-size:12px;">Ninguno</strong>
+        <div class="sep"></div>
+        <span style="font-size:11px;color:var(--muted);">Clic en el plano para añadir elementos</span>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button class="btn btn-sm btn-secondary" id="zoom-out-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <span id="zoom-val" style="font-size:11px;color:var(--muted);line-height:28px;min-width:36px;text-align:center;">100%</span>
+          <button class="btn btn-sm btn-secondary" id="zoom-in-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button class="btn btn-sm btn-secondary" id="zoom-reset-btn" title="100%">⊞</button>
+        </div>
+      </div>
+
+      <!-- Canvas -->
+      <div style="display:flex;flex:1;overflow:hidden;">
+        <div class="canvas-wrap" id="canvas-wrap">
+          <div id="floorplan-canvas">
+            <div class="drop-hint" id="drop-hint">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h6M3 15h6M15 9h6M15 15h6"/></svg>
+              <p>Sube un plano de vivienda</p>
+              <p style="font-size:11px;">PNG, JPG, SVG — hasta 20 MB</p>
+              <label class="btn btn-primary" style="margin-top:4px;pointer-events:auto;cursor:pointer;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                Seleccionar imagen
+                <input type="file" accept="image/*" style="display:none" id="file-input2">
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel de propiedades del pin seleccionado -->
+        <aside class="props-panel" id="props-panel">
+          <div class="empty-state" id="props-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <p>Selecciona un elemento<br>del plano para editarlo</p>
+          </div>
+          <div id="props-form" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Entidad de HA</label>
+              <div class="entity-search-wrap">
+                <input class="form-input" id="prop-entity" placeholder="light.salon…" autocomplete="off">
+                <div class="entity-suggestions" id="entity-suggestions"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nombre visible</label>
+              <input class="form-input" id="prop-label" placeholder="Luz salón">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tipo</label>
+              <select class="form-input form-select" id="prop-type">
+                <option value="state-icon">Icono de estado</option>
+                <option value="state-badge">Badge de estado</option>
+                <option value="label">Etiqueta de valor</option>
+                <option value="service-button">Botón de servicio</option>
+                <option value="icon">Icono fijo</option>
+              </select>
+            </div>
+            <div class="form-group" id="prop-icon-group">
+              <label class="form-label">Icono (mdi:xxx)</label>
+              <input class="form-input" id="prop-icon" placeholder="mdi:lightbulb">
+            </div>
+            <div class="form-group" id="prop-service-group" style="display:none">
+              <label class="form-label">Servicio (domain.action)</label>
+              <input class="form-input" id="prop-service" placeholder="light.toggle">
+            </div>
+            <div class="form-group" id="prop-tap-group">
+              <label class="form-label">Acción al tocar</label>
+              <select class="form-input form-select" id="prop-tap">
+                <option value="more-info">Más info</option>
+                <option value="toggle">Toggle</option>
+                <option value="navigate">Navegar</option>
+                <option value="none">Nada</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Color</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="color" class="color-swatch" id="prop-color" value="#6c63ff">
+                <input class="form-input" id="prop-color-text" placeholder="#6c63ff" style="flex:1;">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tamaño (px)</label>
+              <input class="form-input" id="prop-size" type="number" min="12" max="64" value="28">
+            </div>
+            <div class="form-group" id="prop-unit-group" style="display:none">
+              <label class="form-label">Unidad (°C, %, W…)</label>
+              <input class="form-input" id="prop-unit" placeholder="°C">
+            </div>
+            <div class="form-group" style="border:none;">
+              <button class="btn btn-danger btn-sm" id="delete-pin-btn" style="width:100%;justify-content:center;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                Eliminar elemento
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Tab: Terminal ─────────────────────────────────────── -->
+  <div id="tab-terminal" class="tab-content">
+    <iframe id="terminal-frame" src="/terminal/" title="Claude Code Terminal"></iframe>
+  </div>
+</div>
+
+<!-- ─── Status bar ──────────────────────────────────────────── -->
+<div class="statusbar">
+  <span class="s-item"><span class="s-dot" id="status-dot-fp"></span> <span id="status-fp">Sin plano</span></span>
+  <span class="s-item"><span class="s-dot off" id="status-dot-ha"></span> <span id="status-ha">HA API…</span></span>
+  <span class="s-item" id="status-coords" style="display:none;">📍 <span id="coords-text"></span></span>
+</div>
+
+<!-- ─── YAML Modal ───────────────────────────────────────────── -->
+<div class="modal-overlay hidden" id="yaml-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>YAML — picture-elements card</span>
+      <button class="btn btn-sm btn-secondary" id="yaml-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <textarea class="yaml-output" id="yaml-output" readonly></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="save-yaml-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/></svg>
+        Guardar en /config
+      </button>
+      <button class="btn btn-primary" id="copy-yaml-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Copiar YAML
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Toast container ──────────────────────────────────────── -->
+<div class="toast-container" id="toasts"></div>
+
+<!-- ─── JavaScript ───────────────────────────────────────────── -->
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════
+const STATE = {
+  currentFloorplan: null,   // filename
+  pins: [],
+  selectedPin: null,
+  zoom: 1,
+  addType: 'state-icon',
+  entities: [],
+  imgSize: { w: 800, h: 500 }
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════════
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icons = { success:'✅', error:'❌', info:'ℹ️' };
+  el.innerHTML = `${icons[type] || ''} ${msg}`;
+  const c = document.getElementById('toasts');
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function uid() { return '_' + Math.random().toString(36).slice(2, 9); }
+
+// domain → color
+const DOMAIN_COLORS = {
+  light:       '#ffb300', switch:    '#03a9f4', sensor:    '#4caf50',
+  binary_sensor:'#ff7043', climate:  '#ab47bc', media_player:'#ec407a',
+  cover:       '#8d6e63', fan:       '#26c6da', lock:      '#ef5350',
+  alarm_control_panel:'#f44336', camera:'#78909c',
+  default:     '#6c63ff'
+};
+const DOMAIN_ICONS = {
+  light:'💡', switch:'🔌', sensor:'🌡️', binary_sensor:'🔔',
+  climate:'❄️', media_player:'🎵', cover:'🪟', fan:'💨',
+  lock:'🔒', alarm_control_panel:'🚨', camera:'📷', default:'⬤'
+};
+
+function domainColor(eid) {
+  const d = eid ? eid.split('.')[0] : 'default';
+  return DOMAIN_COLORS[d] || DOMAIN_COLORS.default;
+}
+function domainEmoji(eid) {
+  const d = eid ? eid.split('.')[0] : 'default';
+  return DOMAIN_ICONS[d] || DOMAIN_ICONS.default;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    const target = document.getElementById(`tab-${tab.dataset.tab}`);
+    if (target) target.classList.add('active');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  HOME ASSISTANT: cargar entidades
+// ═══════════════════════════════════════════════════════════════════
+async function loadEntities() {
+  try {
+    const r = await fetch('/api/ha/entities');
+    if (!r.ok) throw new Error('API no disponible');
+    STATE.entities = await r.json();
+    document.getElementById('ha-dot').classList.remove('off');
+    document.getElementById('ha-status').innerHTML = `<span class="s-dot"></span> ${STATE.entities.length} entidades`;
+    document.getElementById('status-dot-ha').classList.remove('off');
+    document.getElementById('status-ha').textContent = `HA: ${STATE.entities.length} entidades`;
+    toast(`${STATE.entities.length} entidades cargadas`, 'success');
+  } catch (e) {
+    document.getElementById('status-ha').textContent = 'HA API no disponible';
+    console.warn('HA API:', e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SUBIR / LISTAR PLANOS
+// ═══════════════════════════════════════════════════════════════════
+async function uploadImage(file) {
+  const fd = new FormData();
+  fd.append('image', file);
+  const r = await fetch('/api/floorplan/upload', { method: 'POST', body: fd });
+  const data = await r.json();
+  if (!data.ok) throw new Error(data.error || 'Error al subir');
+  return data;
+}
+
+async function loadFloorplanList() {
+  const r = await fetch('/api/floorplan/list');
+  const files = await r.json();
+  const list = document.getElementById('floorplan-list');
+  list.innerHTML = '';
+  files.forEach(f => {
+    const item = document.createElement('div');
+    item.className = 'floorplan-item' + (STATE.currentFloorplan === f.filename ? ' active' : '');
+    item.innerHTML = `
+      <span style="font-size:16px">🖼️</span>
+      <span class="fi-name" title="${f.filename}">${f.filename}</span>
+      <button class="btn btn-icon fi-del" title="Eliminar" data-filename="${f.filename}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      </button>`;
+    item.addEventListener('click', e => {
+      if (e.target.closest('.fi-del')) return;
+      selectFloorplan(f.filename, `/floorplans/${f.filename}`);
+    });
+    item.querySelector('.fi-del').addEventListener('click', async () => {
+      await fetch(`/api/floorplan/${f.filename}`, { method: 'DELETE' });
+      if (STATE.currentFloorplan === f.filename) clearFloorplan();
+      loadFloorplanList();
+      toast('Plano eliminado', 'info');
+    });
+    list.appendChild(item);
+  });
+}
+
+// ─── Drag & drop en upload zone ──────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput  = document.getElementById('file-input');
+const fileInput2 = document.getElementById('file-input2');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', async e => {
+  e.preventDefault(); uploadZone.classList.remove('dragover');
+  for (const file of e.dataTransfer.files) await handleImageFile(file);
+});
+fileInput.addEventListener('change', async () => {
+  for (const file of fileInput.files) await handleImageFile(file);
+  fileInput.value = '';
+});
+fileInput2.addEventListener('change', async () => {
+  for (const file of fileInput2.files) await handleImageFile(file);
+  fileInput2.value = '';
+});
+
+async function handleImageFile(file) {
+  if (!file.type.startsWith('image/')) { toast('Solo imágenes', 'error'); return; }
+  try {
+    const data = await uploadImage(file);
+    toast(`${file.name} subida`, 'success');
+    await loadFloorplanList();
+    selectFloorplan(data.filename, data.url);
+  } catch (e) {
+    toast(`Error: ${e.message}`, 'error');
+  }
+}
+
+// ─── Drag & drop en el canvas ─────────────────────────────────────
+const canvasWrap = document.getElementById('canvas-wrap');
+canvasWrap.addEventListener('dragover', e => { e.preventDefault(); canvasWrap.classList.add('dragover'); });
+canvasWrap.addEventListener('dragleave', () => canvasWrap.classList.remove('dragover'));
+canvasWrap.addEventListener('drop', async e => {
+  e.preventDefault(); canvasWrap.classList.remove('dragover');
+  for (const file of e.dataTransfer.files) await handleImageFile(file);
+});
+
+// Pegar imagen desde portapapeles (Ctrl+V)
+document.addEventListener('paste', async e => {
+  for (const item of e.clipboardData.items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      await handleImageFile(file);
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  SELECCIONAR / MOSTRAR PLANO
+// ═══════════════════════════════════════════════════════════════════
+function selectFloorplan(filename, url) {
+  STATE.currentFloorplan = filename;
+  STATE.pins = [];
+  STATE.selectedPin = null;
+
+  const canvas = document.getElementById('floorplan-canvas');
+  const dropHint = document.getElementById('drop-hint');
+  dropHint.classList.add('hidden');
+
+  // Eliminar imagen previa
+  const old = canvas.querySelector('img');
+  if (old) old.remove();
+
+  // Eliminar pins previos
+  canvas.querySelectorAll('.pin').forEach(p => p.remove());
+
+  const img = document.createElement('img');
+  img.src = url;
+  img.draggable = false;
+  img.onload = () => {
+    const maxW = Math.min(img.naturalWidth, canvasWrap.clientWidth - 40);
+    const ratio = img.naturalHeight / img.naturalWidth;
+    canvas.style.width  = maxW + 'px';
+    canvas.style.height = (maxW * ratio) + 'px';
+    STATE.imgSize = { w: maxW, h: maxW * ratio };
+    loadLayout(filename);
+  };
+  canvas.insertBefore(img, canvas.firstChild);
+
+  document.getElementById('current-floorplan-name').textContent = filename;
+  document.getElementById('status-fp').textContent = filename;
+
+  // Marcar activo en lista
+  document.querySelectorAll('.floorplan-item').forEach(it => {
+    it.classList.toggle('active', it.querySelector('.fi-name').title === filename);
+  });
+}
+
+function clearFloorplan() {
+  STATE.currentFloorplan = null;
+  STATE.pins = [];
+  STATE.selectedPin = null;
+  const canvas = document.getElementById('floorplan-canvas');
+  const img = canvas.querySelector('img');
+  if (img) img.remove();
+  canvas.querySelectorAll('.pin').forEach(p => p.remove());
+  document.getElementById('drop-hint').classList.remove('hidden');
+  document.getElementById('current-floorplan-name').textContent = 'Ninguno';
+  document.getElementById('status-fp').textContent = 'Sin plano';
+  renderPinList();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ZOOM
+// ═══════════════════════════════════════════════════════════════════
+function applyZoom() {
+  document.getElementById('floorplan-canvas').style.transform = `scale(${STATE.zoom})`;
+  document.getElementById('zoom-val').textContent = `${Math.round(STATE.zoom * 100)}%`;
+}
+document.getElementById('zoom-in-btn').addEventListener('click', () => { STATE.zoom = Math.min(3, STATE.zoom + 0.15); applyZoom(); });
+document.getElementById('zoom-out-btn').addEventListener('click', () => { STATE.zoom = Math.max(0.3, STATE.zoom - 0.15); applyZoom(); });
+document.getElementById('zoom-reset-btn').addEventListener('click', () => { STATE.zoom = 1; applyZoom(); });
+
+// ═══════════════════════════════════════════════════════════════════
+//  TIPO DE ELEMENTO
+// ═══════════════════════════════════════════════════════════════════
+document.querySelectorAll('.type-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    STATE.addType = pill.dataset.type;
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  AÑADIR PIN al clic en el canvas
+// ═══════════════════════════════════════════════════════════════════
+document.getElementById('floorplan-canvas').addEventListener('click', e => {
+  if (!STATE.currentFloorplan) return;
+  if (e.target.closest('.pin')) return; // clic sobre pin existente → seleccionar
+
+  const canvas = document.getElementById('floorplan-canvas');
+  const rect   = canvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width)  * 100;
+  const y = ((e.clientY - rect.top)  / rect.height) * 100;
+
+  const pin = {
+    id:        uid(),
+    type:      STATE.addType,
+    x, y,
+    entity_id: '',
+    label:     '',
+    icon:      '',
+    color:     '#6c63ff',
+    size:      28,
+    tap:       'more-info',
+    service:   '',
+    unit:      '',
+    prefix:    '',
+    suffix:    '',
+    fontSize:  14
+  };
+  STATE.pins.push(pin);
+  renderPin(pin);
+  renderPinList();
+  selectPin(pin.id);
+});
+
+// ─── Coordenadas en status bar ────────────────────────────────────
+document.getElementById('floorplan-canvas').addEventListener('mousemove', e => {
+  if (!STATE.currentFloorplan) return;
+  const canvas = document.getElementById('floorplan-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
+  const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(1);
+  document.getElementById('status-coords').style.display = '';
+  document.getElementById('coords-text').textContent = `x:${x}% y:${y}%`;
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  RENDERIZAR PIN EN EL CANVAS
+// ═══════════════════════════════════════════════════════════════════
+function renderPin(pin) {
+  const canvas = document.getElementById('floorplan-canvas');
+  let el = canvas.querySelector(`[data-pin-id="${pin.id}"]`);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'pin';
+    el.dataset.pinId = pin.id;
+    canvas.appendChild(el);
+
+    el.addEventListener('click', e => { e.stopPropagation(); selectPin(pin.id); });
+
+    // Drag para mover
+    let dragging = false, ox = 0, oy = 0;
+    el.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      dragging = true;
+      ox = e.clientX; oy = e.clientY;
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const canvas2 = document.getElementById('floorplan-canvas');
+      const rect = canvas2.getBoundingClientRect();
+      const dx = (e.clientX - ox) / rect.width * 100;
+      const dy = (e.clientY - oy) / rect.height * 100;
+      pin.x = Math.max(0, Math.min(100, pin.x + dx));
+      pin.y = Math.max(0, Math.min(100, pin.y + dy));
+      ox = e.clientX; oy = e.clientY;
+      updatePinEl(el, pin);
+    });
+    document.addEventListener('mouseup', () => { dragging = false; });
+  }
+  updatePinEl(el, pin);
+}
+
+function updatePinEl(el, pin) {
+  el.style.left = `${pin.x}%`;
+  el.style.top  = `${pin.y}%`;
+  const color = pin.color || domainColor(pin.entity_id);
+  const emoji  = domainEmoji(pin.entity_id);
+  el.innerHTML = `
+    <div class="pin-inner" style="background:${color}22;border-color:${color}88;width:${pin.size||28}px;height:${pin.size||28}px;">
+      <span style="font-size:${Math.round((pin.size||28)*0.5)}px;color:${color}">${emoji}</span>
+    </div>
+    <div class="pin-label">${pin.label || pin.entity_id || pin.type}</div>`;
+}
+
+function renderAllPins() {
+  const canvas = document.getElementById('floorplan-canvas');
+  canvas.querySelectorAll('.pin').forEach(p => p.remove());
+  STATE.pins.forEach(renderPin);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  LISTA DE PINS (sidebar izquierda)
+// ═══════════════════════════════════════════════════════════════════
+function renderPinList() {
+  const list = document.getElementById('pin-list');
+  list.innerHTML = '';
+  document.getElementById('pin-count').textContent = STATE.pins.length;
+
+  STATE.pins.forEach(pin => {
+    const item = document.createElement('div');
+    item.style.cssText = `display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:all .12s;`;
+    if (STATE.selectedPin === pin.id) item.style.borderColor = 'var(--accent)';
+    item.innerHTML = `
+      <span style="font-size:13px">${domainEmoji(pin.entity_id)}</span>
+      <div style="flex:1;overflow:hidden;">
+        <div style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pin.label || pin.entity_id || pin.type}</div>
+        <div style="font-size:10px;color:var(--muted)">${pin.type} · x:${pin.x.toFixed(0)}% y:${pin.y.toFixed(0)}%</div>
+      </div>`;
+    item.addEventListener('click', () => selectPin(pin.id));
+    item.addEventListener('mouseenter', () => { if (STATE.selectedPin !== pin.id) item.style.background = 'var(--surface2)'; });
+    item.addEventListener('mouseleave', () => { if (STATE.selectedPin !== pin.id) item.style.background = ''; });
+    list.appendChild(item);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SELECCIONAR PIN → mostrar en panel de propiedades
+// ═══════════════════════════════════════════════════════════════════
+function selectPin(id) {
+  STATE.selectedPin = id;
+  document.querySelectorAll('.pin').forEach(el => {
+    el.classList.toggle('selected', el.dataset.pinId === id);
+  });
+  renderPinList();
+
+  const pin = STATE.pins.find(p => p.id === id);
+  if (!pin) { showPropsEmpty(); return; }
+
+  document.getElementById('props-empty').style.display = 'none';
+  document.getElementById('props-form').style.display  = 'block';
+
+  document.getElementById('prop-entity').value   = pin.entity_id || '';
+  document.getElementById('prop-label').value    = pin.label     || '';
+  document.getElementById('prop-type').value     = pin.type;
+  document.getElementById('prop-icon').value     = pin.icon      || '';
+  document.getElementById('prop-service').value  = pin.service   || '';
+  document.getElementById('prop-tap').value      = pin.tap       || 'more-info';
+  document.getElementById('prop-color').value    = pin.color     || '#6c63ff';
+  document.getElementById('prop-color-text').value = pin.color   || '#6c63ff';
+  document.getElementById('prop-size').value     = pin.size      || 28;
+  document.getElementById('prop-unit').value     = pin.unit      || '';
+
+  updatePropsVisibility(pin.type);
+}
+
+function showPropsEmpty() {
+  document.getElementById('props-empty').style.display = 'flex';
+  document.getElementById('props-form').style.display  = 'none';
+}
+
+function updatePropsVisibility(type) {
+  document.getElementById('prop-service-group').style.display = type === 'service-button' ? '' : 'none';
+  document.getElementById('prop-unit-group').style.display    = type === 'label' ? '' : 'none';
+}
+
+// ─── Actualizar pin al cambiar propiedades ─────────────────────────
+function updateSelectedPin(field, value) {
+  const pin = STATE.pins.find(p => p.id === STATE.selectedPin);
+  if (!pin) return;
+  pin[field] = value;
+  const el = document.querySelector(`[data-pin-id="${pin.id}"]`);
+  if (el) updatePinEl(el, pin);
+  renderPinList();
+}
+
+['prop-entity', 'prop-label', 'prop-icon', 'prop-service', 'prop-tap', 'prop-color-text', 'prop-unit'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    const field = id.replace('prop-', '').replace('-text', '').replace('-', '_');
+    const map = { 'entity': 'entity_id', 'label': 'label', 'icon': 'icon', 'service': 'service', 'tap': 'tap', 'color': 'color', 'unit': 'unit' };
+    const key = id === 'prop-color-text' ? 'color' : (id === 'prop-entity' ? 'entity_id' : id.replace('prop-', '').replace('-', '_'));
+    updateSelectedPin(key, e.target.value);
+  });
+});
+document.getElementById('prop-color').addEventListener('input', e => {
+  document.getElementById('prop-color-text').value = e.target.value;
+  updateSelectedPin('color', e.target.value);
+});
+document.getElementById('prop-size').addEventListener('input', e => updateSelectedPin('size', +e.target.value));
+document.getElementById('prop-type').addEventListener('change', e => {
+  updateSelectedPin('type', e.target.value);
+  updatePropsVisibility(e.target.value);
+});
+
+// ─── Eliminar pin ─────────────────────────────────────────────────
+document.getElementById('delete-pin-btn').addEventListener('click', () => {
+  if (!STATE.selectedPin) return;
+  STATE.pins = STATE.pins.filter(p => p.id !== STATE.selectedPin);
+  const el = document.querySelector(`[data-pin-id="${STATE.selectedPin}"]`);
+  if (el) el.remove();
+  STATE.selectedPin = null;
+  showPropsEmpty();
+  renderPinList();
+});
+
+document.getElementById('clear-pins-btn').addEventListener('click', () => {
+  STATE.pins = [];
+  STATE.selectedPin = null;
+  document.querySelectorAll('.pin').forEach(p => p.remove());
+  showPropsEmpty();
+  renderPinList();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  BÚSQUEDA DE ENTIDADES
+// ═══════════════════════════════════════════════════════════════════
+const entityInput  = document.getElementById('prop-entity');
+const suggestions  = document.getElementById('entity-suggestions');
+
+entityInput.addEventListener('input', () => {
+  const q = entityInput.value.toLowerCase();
+  if (!q || q.length < 2) { suggestions.classList.remove('open'); return; }
+
+  const matches = STATE.entities
+    .filter(e => e.entity_id.includes(q) || e.name.toLowerCase().includes(q))
+    .slice(0, 12);
+
+  if (!matches.length) { suggestions.classList.remove('open'); return; }
+
+  suggestions.innerHTML = matches.map(e =>
+    `<div class="entity-suggestion" data-eid="${e.entity_id}" data-name="${e.name}">
+      <span class="eid">${e.entity_id}</span>
+      <span class="ename">${e.name} · ${e.state}${e.unit ? ' ' + e.unit : ''}</span>
+    </div>`).join('');
+  suggestions.classList.add('open');
+});
+
+suggestions.addEventListener('click', e => {
+  const item = e.target.closest('.entity-suggestion');
+  if (!item) return;
+  entityInput.value = item.dataset.eid;
+  updateSelectedPin('entity_id', item.dataset.eid);
+  if (!document.getElementById('prop-label').value) {
+    document.getElementById('prop-label').value = item.dataset.name;
+    updateSelectedPin('label', item.dataset.name);
+  }
+  suggestions.classList.remove('open');
+  // Auto-icon si no hay
+  const entity = STATE.entities.find(e => e.entity_id === item.dataset.eid);
+  if (entity && entity.unit && !document.getElementById('prop-unit').value) {
+    document.getElementById('prop-unit').value = entity.unit;
+    updateSelectedPin('unit', entity.unit);
+  }
+});
+
+document.addEventListener('click', e => {
+  if (!suggestions.contains(e.target) && e.target !== entityInput)
+    suggestions.classList.remove('open');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  GUARDAR / CARGAR LAYOUT
+// ═══════════════════════════════════════════════════════════════════
+document.getElementById('save-layout-btn').addEventListener('click', async () => {
+  if (!STATE.currentFloorplan) { toast('Selecciona un plano primero', 'error'); return; }
+  await fetch('/api/layout/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ floorplan: STATE.currentFloorplan, pins: STATE.pins, name: STATE.currentFloorplan })
+  });
+  toast('Disposición guardada', 'success');
+});
+
+async function loadLayout(filename) {
+  const r = await fetch(`/api/layout/${filename}`);
+  const data = await r.json();
+  STATE.pins = data.pins || [];
+  renderAllPins();
+  renderPinList();
+  if (STATE.pins.length) toast(`${STATE.pins.length} elementos restaurados`, 'info');
+}
+
+document.getElementById('load-layout-btn').addEventListener('click', async () => {
+  if (!STATE.currentFloorplan) { toast('Selecciona un plano primero', 'error'); return; }
+  await loadLayout(STATE.currentFloorplan);
+  toast('Disposición cargada', 'success');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXPORTAR YAML
+// ═══════════════════════════════════════════════════════════════════
+document.getElementById('export-yaml-btn').addEventListener('click', async () => {
+  if (!STATE.currentFloorplan) { toast('Selecciona un plano primero', 'error'); return; }
+  if (!STATE.pins.length) { toast('Añade al menos un elemento', 'error'); return; }
+
+  const r = await fetch('/api/generate/yaml', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ floorplan: STATE.currentFloorplan, pins: STATE.pins, title: STATE.currentFloorplan.replace(/\.[^.]+$/, '') })
+  });
+  const data = await r.json();
+  document.getElementById('yaml-output').value = data.yaml;
+  document.getElementById('yaml-modal').classList.remove('hidden');
+});
+
+document.getElementById('yaml-modal-close').addEventListener('click', () => {
+  document.getElementById('yaml-modal').classList.add('hidden');
+});
+document.getElementById('yaml-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('yaml-modal'))
+    document.getElementById('yaml-modal').classList.add('hidden');
+});
+
+document.getElementById('copy-yaml-btn').addEventListener('click', () => {
+  const text = document.getElementById('yaml-output').value;
+  navigator.clipboard.writeText(text).then(() => toast('YAML copiado al portapapeles', 'success'));
+});
+
+document.getElementById('save-yaml-btn').addEventListener('click', async () => {
+  const content = document.getElementById('yaml-output').value;
+  const filename = STATE.currentFloorplan.replace(/\.[^.]+$/, '') + '-lovelace';
+  const r = await fetch('/api/save/yaml', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content })
+  });
+  const data = await r.json();
+  if (data.ok) toast(`Guardado en ${data.path}`, 'success');
+  else toast(`Error: ${data.error}`, 'error');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  INICIALIZACIÓN
+// ═══════════════════════════════════════════════════════════════════
+loadEntities();
+loadFloorplanList();
+showPropsEmpty();
+</script>
+</body>
+</html>

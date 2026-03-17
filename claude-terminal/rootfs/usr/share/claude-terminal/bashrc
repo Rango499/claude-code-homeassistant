@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# .bashrc personalizado para Claude Code Terminal en Home Assistant
+# Se carga automáticamente en cada sesión del terminal
+# ==============================================================================
+
+# Colores y PS1 personalizado
+RED='\[\033[0;31m\]'
+GREEN='\[\033[0;32m\]'
+YELLOW='\[\033[1;33m\]'
+BLUE='\[\033[0;34m\]'
+CYAN='\[\033[0;36m\]'
+PURPLE='\[\033[0;35m\]'
+WHITE='\[\033[1;37m\]'
+NC='\[\033[0m\]'
+
+# Prompt con contexto de HA
+export PS1="${CYAN}[HA]${NC} ${GREEN}\w${NC} ${YELLOW}❯${NC} "
+
+# Alias útiles
+alias ll='ls -la --color=auto'
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias config='cd /config && ls'
+alias automations='cat /config/automations.yaml | head -100'
+alias restart-ha='ha core restart'
+alias check-ha='ha core check'
+alias logs-ha='ha core logs'
+
+# Historial mejorado
+HISTSIZE=10000
+HISTFILESIZE=20000
+HISTCONTROL=ignoredups:erasedups
+shopt -s histappend
+
+# Cargar herramientas de HA
+source /usr/share/claude-terminal/scripts/ha-tools.sh
+source /usr/share/claude-terminal/scripts/lovelace-tools.sh
+
+# PATH
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/share/claude-terminal/scripts:${PATH}"
+
+# Variables de entorno útiles
+export EDITOR=nano
+export VISUAL=nano
+export HA_CONFIG_DIR="/config"
+
+# Mostrar bienvenida
+clear
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║           🤖 Claude Code Terminal para Home Assistant             ║"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+echo ""
+echo "  📁 Directorio de configuración: /config"
+echo "  🔧 Comandos HA: escribe 'ha-help' para ver opciones"
+echo "  🤖 Claude Code: escribe 'claude' para iniciar"
+echo "  📚 Archivos: /config/automations.yaml, configuration.yaml..."
+echo ""
+echo "  Consejos:"
+echo "  • usa 'ha-backup' antes de hacer cambios importantes"
+echo "  • usa 'ha-check' para validar la configuración"
+echo "  • claude puede leer y editar todos los archivos de /config"
+echo ""
