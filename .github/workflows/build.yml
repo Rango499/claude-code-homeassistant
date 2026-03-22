@@ -8,7 +8,7 @@ on:
       - ".github/workflows/build.yml"
   release:
     types: [published]
-  workflow_dispatch:   # permite lanzarlo manualmente desde GitHub
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -35,12 +35,7 @@ jobs:
           - arch: armv7
             platform: linux/arm/v7
             build_from_suffix: armv7
-          - arch: armhf
-            platform: linux/arm/v6
-            build_from_suffix: armhf
-          - arch: i386
-            platform: linux/386
-            build_from_suffix: i386
+          # armhf (ARMv6) e i386 excluidos: Node.js 20 no soporta estas arquitecturas
 
     steps:
       - name: ⬇️ Checkout
@@ -53,32 +48,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏗️ Configurar QEMU (para cross-compilation)
+      - name: 🏗️ Configurar QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: 🏗️ Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 📋 Extraer metadatos de la imagen
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.arch }}
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
       - name: 🔍 Leer versión del addon
         id: addon_version
         run: |
-          VERSION=$(cat claude-terminal/config.yaml | grep '^version:' | awk '{print $2}' | tr -d '"')
+          VERSION=$(grep '^version:' claude-terminal/config.yaml | awk '{print $2}' | tr -d '"')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Versión del addon: $VERSION"
+          echo "Versión: $VERSION"
 
-      - name: 🐳 Build y push Docker image
-        uses: docker/build-push-action@v5
+      - name: 🐳 Build y push
+        uses: docker/build-push-action@v6
         with:
           context: ./claude-terminal
           platforms: ${{ matrix.platform }}
@@ -88,13 +72,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.arch }}:latest
           build-args: |
             BUILD_FROM=ghcr.io/hassio-addons/debian-base/${{ matrix.build_from_suffix }}:7.3.2
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ──────────────────────────────────────────────────────────────────────
-  # Crear un release en GitHub con las notas del CHANGELOG
-  # ──────────────────────────────────────────────────────────────────────
   release:
     name: 📦 Crear Release
     needs: build
@@ -110,24 +90,14 @@ jobs:
       - name: 📋 Leer versión
         id: version
         run: |
-          VERSION=$(cat claude-terminal/config.yaml | grep '^version:' | awk '{print $2}' | tr -d '"')
+          VERSION=$(grep '^version:' claude-terminal/config.yaml | awk '{print $2}' | tr -d '"')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: 📝 Extraer notas del CHANGELOG
-        id: changelog
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          NOTES=$(awk "/## \[$VERSION\]/{flag=1; next} /## \[/{flag=0} flag" claude-terminal/CHANGELOG.md)
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: 🏷️ Crear tag y release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          body: ${{ steps.changelog.outputs.notes }}
           draft: false
           prerelease: false
         env:

@@ -51,11 +51,21 @@ RUN apt-get update \
 
 # ==============================================================================
 # Instalar Node.js (necesario para Claude Code)
+# Descarga el binario oficial de nodejs.org para mayor compatibilidad multi-arch
 # ==============================================================================
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g npm@latest \
-    && rm -rf /var/lib/apt/lists/*
+RUN NODE_VER="20.18.1" \
+    && ARCH=$(uname -m) \
+    && case "$ARCH" in \
+        x86_64)  NODE_ARCH="x64" ;; \
+        aarch64) NODE_ARCH="arm64" ;; \
+        armv7l)  NODE_ARCH="armv7l" ;; \
+        *)       echo "Arquitectura no soportada: $ARCH" && exit 1 ;; \
+    esac \
+    && wget -O /tmp/node.tar.gz \
+        "https://nodejs.org/dist/v${NODE_VER}/node-v${NODE_VER}-linux-${NODE_ARCH}.tar.gz" \
+    && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 \
+    && rm /tmp/node.tar.gz \
+    && node --version && npm --version
 
 # ==============================================================================
 # Instalar ttyd (terminal web)
