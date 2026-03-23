@@ -1,3 +1,13 @@
+## [1.0.9] - 2026-03-23
+
+### Corregido
+- **Eliminado ttyd por completo** — raíz del segfault persistente en aarch64 (Raspberry Pi 4)
+- Terminal PTY ahora corre directamente dentro del servidor Node.js usando `node-pty` (módulo nativo Node.js, sin binarios C externos)
+- Protocolo WebSocket xterm.js simplificado: stdin/stdout directo + JSON `{type:"resize"}` (sin auth token de ttyd)
+- Dockerfile limpiado: eliminadas dependencias de ttyd (`libjson-c-dev`, `libwebsockets-dev`), puerto 7681 ya no se expone
+- Healthcheck apunta correctamente a puerto 8099
+- Añadido `test-local.sh` en la raíz del repositorio para probar el servidor Node.js localmente antes de hacer push
+
 ## [1.0.8] - 2026-03-23
 
 ### Corregido

@@ -134,31 +134,11 @@ BASHRC_APPEND
 mkdir -p /config/www/floorplans 2>/dev/null || true
 
 # ==============================================================================
-# Iniciar ttyd — comando mínimo y estable
-# NO usamos --base-path ni -t (opciones de tema): el front-end xterm.js
-# se conecta directamente al WebSocket /ws de ttyd y aplica el tema por su cuenta.
-# Esto evita el segfault que causaban --base-path /terminal y -t "theme=...".
+# Iniciar servidor web principal
+# El terminal PTY (bash) corre directamente dentro de Node.js con node-pty.
+# Ya no se necesita ttyd — sin binarios C externos, sin riesgo de segfault.
 # ==============================================================================
-echo "[INFO] Iniciando ttyd en puerto 7681 (interno)..."
-
-ttyd \
-    --port 7681 \
-    --interface 127.0.0.1 \
-    --writable \
-    --max-clients 10 \
-    --ping-interval 30 \
-    bash -i &
-
-TTYD_PID=$!
-echo "[INFO] ttyd iniciado (PID: ${TTYD_PID})"
-
-# Esperar a que ttyd esté listo
-sleep 3
-
-# ==============================================================================
-# Iniciar servidor web principal (editor de planos + proxy terminal)
-# ==============================================================================
-echo "[INFO] Iniciando interfaz principal en puerto 8099..."
+echo "[INFO] Iniciando servidor (UI + terminal PTY) en puerto 8099..."
 export UI_PORT=8099
 
 exec node /usr/share/claude-terminal/server/index.js

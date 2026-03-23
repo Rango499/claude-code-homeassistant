@@ -35,9 +35,6 @@ RUN apt-get update \
         python3-pip \
         python3-venv \
         build-essential \
-        cmake \
-        libjson-c-dev \
-        libwebsockets-dev \
         pkg-config \
         ssl-cert \
         ca-certificates \
@@ -66,23 +63,6 @@ RUN NODE_VER="20.18.1" \
     && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 \
     && rm /tmp/node.tar.gz \
     && node --version && npm --version
-
-# ==============================================================================
-# Instalar ttyd (terminal web)
-# ==============================================================================
-RUN TTYD_VERSION=$(curl -s https://api.github.com/repos/tsl0922/ttyd/releases/latest | jq -r .tag_name) \
-    && ARCH=$(uname -m) \
-    && case "$ARCH" in \
-        x86_64)  TTYD_ARCH="x86_64" ;; \
-        aarch64) TTYD_ARCH="aarch64" ;; \
-        armv7l)  TTYD_ARCH="arm" ;; \
-        armhf)   TTYD_ARCH="arm" ;; \
-        i686)    TTYD_ARCH="i686" ;; \
-        *)       TTYD_ARCH="x86_64" ;; \
-    esac \
-    && wget -O /usr/local/bin/ttyd \
-        "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
-    && chmod +x /usr/local/bin/ttyd
 
 # ==============================================================================
 # Instalar Claude Code CLI
@@ -122,14 +102,15 @@ RUN chmod +x /run.sh \
     && find /etc/s6-overlay -name "finish" -exec chmod +x {} \; 2>/dev/null || true
 
 # ==============================================================================
-# Puertos: 8099 = UI principal (editor + terminal embed), 7681 = ttyd interno
+# Puerto: 8099 = UI principal (editor de planos + terminal xterm.js)
+# No se necesita el 7681 — el terminal PTY corre directamente en Node.js
 # ==============================================================================
-EXPOSE 8099 7681
+EXPOSE 8099
 
 # ==============================================================================
 # Healthcheck
 # ==============================================================================
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:7681 || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8099 || exit 1
 
 CMD ["/run.sh"]

@@ -1,15 +1,16 @@
 'use strict';
 
-const http     = require('http');
-const express  = require('express');
-const multer   = require('multer');
-const path     = require('path');
-const fs       = require('fs');
-const fetch    = require('node-fetch');
-const yaml     = require('js-yaml');
-const cors     = require('cors');
-const morgan   = require('morgan');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const http    = require('http');
+const express = require('express');
+const multer  = require('multer');
+const path    = require('path');
+const fs      = require('fs');
+const fetch   = require('node-fetch');
+const yaml    = require('js-yaml');
+const cors    = require('cors');
+const morgan  = require('morgan');
+const pty     = require('node-pty');
+const WebSocket = require('ws');
 
 const app  = express();
 const PORT = process.env.UI_PORT || 8099;
@@ -29,20 +30,6 @@ const WEB_DIR        = path.join(__dirname, '..', 'web');
 app.use(cors());
 app.use(morgan('tiny'));
 app.use(express.json({ limit: '50mb' }));
-
-// ─── Proxy WebSocket hacia ttyd ───────────────────────────────────────────────
-// ttyd corre sin --base-path, su WebSocket está en /ws.
-// Nuestro front-end conecta a /terminal/ws → lo redirigimos a /ws en ttyd.
-// Solo proxy WebSocket (no proxying de HTML de ttyd — usamos xterm.js propio).
-const terminalProxy = createProxyMiddleware({
-  target: 'http://127.0.0.1:7681',
-  changeOrigin: true,
-  ws: true,
-  pathRewrite: { '^/terminal/ws': '/ws' },
-  logLevel: 'silent',
-});
-
-app.use('/terminal/ws', terminalProxy);
 
 // ─── Archivos estáticos (planos y SPA) ───────────────────────────────────────
 app.use('/floorplans', express.static(FLOORPLANS_DIR));
@@ -218,14 +205,79 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(WEB_DIR, 'index.html'));
 });
 
-// ─── Crear servidor HTTP explícito para manejar upgrades WebSocket de ttyd ────
-// IMPORTANTE: app.listen() no permite gestionar el evento 'upgrade'.
-// Sin este handler, las conexiones WebSocket del terminal nunca se establecen.
+// ─── Servidor HTTP ────────────────────────────────────────────────────────────
 const server = http.createServer(app);
 
+// ─── WebSocket PTY: terminal nativo sin ttyd ──────────────────────────────────
+// Cada conexión WebSocket a /terminal/ws crea un proceso bash con PTY real.
+// Protocolo (sin auth token, protocolo propio simple):
+//   Client → Server: cadena de texto = stdin al bash
+//   Client → Server: JSON {"type":"resize","cols":N,"rows":N} = redimensionar
+//   Server → Client: cadena de texto = stdout del bash
+const wss = new WebSocket.Server({ noServer: true });
+
+wss.on('connection', (ws) => {
+  const env = {
+    ...process.env,
+    TERM:      'xterm-256color',
+    COLORTERM: 'truecolor',
+    LANG:      'C.UTF-8',
+  };
+
+  const shell = pty.spawn('bash', ['-i'], {
+    name: 'xterm-256color',
+    cols: 80,
+    rows: 24,
+    cwd:  env.HA_WORKING_DIR || '/config',
+    env,
+  });
+
+  console.log(`[PTY] Nueva sesión bash (PID ${shell.pid})`);
+
+  // Stdout del bash → cliente WebSocket
+  shell.onData(data => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(data);
+    }
+  });
+
+  // bash terminó → cerrar WebSocket
+  shell.onExit(({ exitCode }) => {
+    console.log(`[PTY] bash terminó (exit ${exitCode})`);
+    try { ws.close(); } catch {}
+  });
+
+  // Cliente → bash
+  ws.on('message', (data) => {
+    const str = typeof data === 'string' ? data : data.toString('utf8');
+    try {
+      const msg = JSON.parse(str);
+      if (msg.type === 'resize') {
+        const cols = Math.max(1, Math.min(500, msg.cols || 80));
+        const rows = Math.max(1, Math.min(200, msg.rows || 24));
+        shell.resize(cols, rows);
+        return;
+      }
+    } catch {}
+    // No es JSON → stdin normal
+    shell.write(str);
+  });
+
+  ws.on('close', () => {
+    try { shell.kill(); } catch {}
+  });
+
+  ws.on('error', () => {
+    try { shell.kill(); } catch {}
+  });
+});
+
+// ─── Gestionar upgrade WebSocket ──────────────────────────────────────────────
 server.on('upgrade', (req, socket, head) => {
-  if (req.url.startsWith('/terminal/ws')) {
-    terminalProxy.upgrade(req, socket, head);
+  if (req.url === '/terminal/ws') {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
   } else {
     socket.destroy();
   }
@@ -233,5 +285,5 @@ server.on('upgrade', (req, socket, head) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[INFO] Claude HA Terminal UI → http://0.0.0.0:${PORT}`);
-  console.log(`[INFO] Terminal proxy → http://127.0.0.1:7681`);
+  console.log(`[INFO] Terminal PTY: node-pty (sin ttyd)`);
 });

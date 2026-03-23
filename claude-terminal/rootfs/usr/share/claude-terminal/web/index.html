@@ -1187,7 +1187,7 @@ showPropsEmpty();
     // Enviar pulsaciones de teclas al proceso bash remoto
     term.onData(data => {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send('0' + data);
+        ws.send(data);   // stdin directo — sin prefijo (protocolo node-pty propio)
       }
     });
 
@@ -1197,10 +1197,10 @@ showPropsEmpty();
   // ── Enviar resize al proceso remoto ────────────────────────────────────
   function sendResize() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !term) return;
-    ws.send('1' + JSON.stringify({ columns: term.cols, rows: term.rows }));
+    ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
   }
 
-  // ── Conexión WebSocket con ttyd ────────────────────────────────────────
+  // ── Conexión WebSocket con servidor node-pty ───────────────────────────
   function connect() {
     clearTimeout(reconnectTimer);
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1208,37 +1208,24 @@ showPropsEmpty();
 
     setStatus(false, 'Conectando...');
     ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
-      // Protocolo ttyd: primero enviar token de auth (vacío)
-      ws.send('{"AuthToken":""}');
-      // Luego enviar tamaño inicial
+      // Protocolo propio node-pty: solo enviar tamaño inicial
       fitAddon.fit();
       sendResize();
       setStatus(true, 'Conectado · Claude Code Terminal');
     };
 
     ws.onmessage = (evt) => {
-      let type, payload;
+      // El servidor envía stdout directamente como texto
       if (evt.data instanceof ArrayBuffer) {
-        const bytes = new Uint8Array(evt.data);
-        type    = String.fromCharCode(bytes[0]);
-        payload = new TextDecoder('utf-8').decode(bytes.slice(1));
+        term.write(new Uint8Array(evt.data));
       } else {
-        type    = evt.data[0];
-        payload = evt.data.slice(1);
-      }
-      switch (type) {
-        case '0': term.write(payload); break;           // stdout → xterm
-        case '1': /* title change — ignorar */ break;
-        case '2': /* preferences de ttyd — ignoramos, xterm.js usa las nuestras */ break;
-        case '3': if (ws.readyState === WebSocket.OPEN) ws.send('3'); break; // pong
-        default:  break;
+        term.write(evt.data);
       }
     };
 
-    ws.onclose = (evt) => {
+    ws.onclose = () => {
       setStatus(false, 'Desconectado — reconectando en 3 s…');
       term.write('\r\n\x1b[33m[Terminal desconectado. Reconectando...]\x1b[0m\r\n');
       reconnectTimer = setTimeout(connect, 3000);
