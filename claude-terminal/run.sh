@@ -98,12 +98,13 @@ if [ ! -L "${HOME}/.claude" ]; then
 fi
 
 # ==============================================================================
-# Exportar variables para que el .bashrc las use al arrancar el terminal
-# Así el auto-launch de Claude funciona sin necesidad de -c (que rompe interactividad)
+# Exportar variables para que el .bashrc y Node.js las usen
 # ==============================================================================
 export HA_AUTO_LAUNCH="${AUTO_LAUNCH}"
 export HA_SKIP_PERMISSIONS="${SKIP_PERMISSIONS}"
 export HA_WORKING_DIR="${WORKING_DIR}"
+export HA_THEME_JSON="${THEME_JSON}"
+export HA_FONT_SIZE="${FONT_SIZE}"
 
 # ==============================================================================
 # Construir el .bashrc final combinando base + auto-launch
@@ -133,21 +134,16 @@ BASHRC_APPEND
 mkdir -p /config/www/floorplans 2>/dev/null || true
 
 # ==============================================================================
-# Iniciar ttyd como shell interactiva (-i) con --base-path /terminal
-# --base-path hace que ttyd sirva sus assets bajo /terminal/... para que
-# el proxy del servidor Node.js funcione correctamente
+# Iniciar ttyd — comando mínimo y estable
+# NO usamos --base-path ni -t (opciones de tema): el front-end xterm.js
+# se conecta directamente al WebSocket /ws de ttyd y aplica el tema por su cuenta.
+# Esto evita el segfault que causaban --base-path /terminal y -t "theme=...".
 # ==============================================================================
 echo "[INFO] Iniciando ttyd en puerto 7681 (interno)..."
 
 ttyd \
     --port 7681 \
     --interface 127.0.0.1 \
-    --base-path /terminal \
-    --title-format "Claude Code - Home Assistant" \
-    -t "theme=${THEME_JSON}" \
-    -t "fontSize=${FONT_SIZE}" \
-    -t "cursorBlink=true" \
-    -t "rendererType=canvas" \
     --writable \
     --max-clients 10 \
     --ping-interval 30 \

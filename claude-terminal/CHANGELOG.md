@@ -1,3 +1,11 @@
+## [1.0.8] - 2026-03-23
+
+### Corregido
+- Segfault de ttyd eliminado definitivamente: se quitan `--base-path /terminal` y todas las opciones `-t theme/fontSize` del comando ttyd
+- Terminal reescrito con **xterm.js nativo** (sin iframe): conecta directamente al WebSocket de ttyd (`/terminal/ws → /ws`), aplica tema y tamaño de fuente desde el servidor sin depender de ttyd para ello
+- Endpoint `/api/config` nuevo en el servidor Node.js para exportar el tema y el `font_size` configurados al frontend xterm.js
+- Indicador de estado de conexión visible (verde = conectado, rojo = desconectado) con reconexión automática cada 3 s
+
 ## [1.0.7] - 2026-03-23
 
 ### Corregido

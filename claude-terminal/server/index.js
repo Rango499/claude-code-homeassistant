@@ -30,17 +30,19 @@ app.use(cors());
 app.use(morgan('tiny'));
 app.use(express.json({ limit: '50mb' }));
 
-// ─── Proxy hacia ttyd ─────────────────────────────────────────────────────────
-// ttyd arranca con --base-path /terminal, así que sirve sus assets en /terminal/...
-// No necesitamos pathRewrite: el path llega tal cual a ttyd y él lo entiende.
+// ─── Proxy WebSocket hacia ttyd ───────────────────────────────────────────────
+// ttyd corre sin --base-path, su WebSocket está en /ws.
+// Nuestro front-end conecta a /terminal/ws → lo redirigimos a /ws en ttyd.
+// Solo proxy WebSocket (no proxying de HTML de ttyd — usamos xterm.js propio).
 const terminalProxy = createProxyMiddleware({
   target: 'http://127.0.0.1:7681',
   changeOrigin: true,
-  ws: true,           // activar soporte WebSocket
+  ws: true,
+  pathRewrite: { '^/terminal/ws': '/ws' },
   logLevel: 'silent',
 });
 
-app.use('/terminal', terminalProxy);
+app.use('/terminal/ws', terminalProxy);
 
 // ─── Archivos estáticos (planos y SPA) ───────────────────────────────────────
 app.use('/floorplans', express.static(FLOORPLANS_DIR));
@@ -61,6 +63,16 @@ const upload = multer({
     const ok = /\.(png|jpg|jpeg|gif|svg|webp)$/i.test(file.originalname);
     cb(ok ? null : new Error('Solo imágenes'), ok);
   }
+});
+
+// ─── API: Configuración del addon (tema + fuente para xterm.js) ──────────────
+app.get('/api/config', (req, res) => {
+  let theme = {};
+  try { theme = JSON.parse(process.env.HA_THEME_JSON || '{}'); } catch {}
+  res.json({
+    theme,
+    fontSize: parseInt(process.env.HA_FONT_SIZE || '14', 10)
+  });
 });
 
 // ─── API: Subir imagen ────────────────────────────────────────────────────────
@@ -212,7 +224,7 @@ app.get('*', (req, res) => {
 const server = http.createServer(app);
 
 server.on('upgrade', (req, socket, head) => {
-  if (req.url.startsWith('/terminal')) {
+  if (req.url.startsWith('/terminal/ws')) {
     terminalProxy.upgrade(req, socket, head);
   } else {
     socket.destroy();
