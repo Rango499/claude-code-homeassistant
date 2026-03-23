@@ -2,7 +2,6 @@
 # ==============================================================================
 # Home Assistant Add-on: Claude Code Terminal
 # Script principal de arranque
-# Lee la configuración directamente desde /data/options.json con jq
 # ==============================================================================
 
 set -e
@@ -62,7 +61,7 @@ if [ ! -d "${WORKING_DIR}" ]; then
 fi
 
 # ==============================================================================
-# Instalar paquetes adicionales del sistema (configurados por el usuario)
+# Instalar paquetes adicionales del sistema
 # ==============================================================================
 EXTRA_PACKAGES=$(jq -r '.extra_packages // [] | .[]' "${OPTIONS_FILE}" 2>/dev/null || true)
 if [ -n "${EXTRA_PACKAGES}" ]; then
@@ -73,7 +72,7 @@ if [ -n "${EXTRA_PACKAGES}" ]; then
 fi
 
 # ==============================================================================
-# Instalar paquetes adicionales de Python (configurados por el usuario)
+# Instalar paquetes adicionales de Python
 # ==============================================================================
 EXTRA_PIP=$(jq -r '.extra_pip_packages // [] | .[]' "${OPTIONS_FILE}" 2>/dev/null || true)
 if [ -n "${EXTRA_PIP}" ]; then
@@ -99,25 +98,34 @@ if [ ! -L "${HOME}/.claude" ]; then
 fi
 
 # ==============================================================================
-# Construir el comando de arranque del terminal
+# Exportar variables para que el .bashrc las use al arrancar el terminal
+# Así el auto-launch de Claude funciona sin necesidad de -c (que rompe interactividad)
 # ==============================================================================
-BASH_CMD="cd ${WORKING_DIR} && "
+export HA_AUTO_LAUNCH="${AUTO_LAUNCH}"
+export HA_SKIP_PERMISSIONS="${SKIP_PERMISSIONS}"
+export HA_WORKING_DIR="${WORKING_DIR}"
 
-if [ "${AUTO_LAUNCH}" = "true" ]; then
-    if [ "${SKIP_PERMISSIONS}" = "true" ]; then
-        echo "[WARNING] Modo dangerously_skip_permissions activado"
-        BASH_CMD="${BASH_CMD}claude --dangerously-skip-permissions"
+# ==============================================================================
+# Construir el .bashrc final combinando base + auto-launch
+# ==============================================================================
+cp /usr/share/claude-terminal/bashrc "${HOME}/.bashrc"
+
+cat >> "${HOME}/.bashrc" << 'BASHRC_APPEND'
+
+# ── Auto-launch Claude Code (configurado desde el addon) ──────────────────────
+if [ "${HA_AUTO_LAUNCH:-true}" = "true" ] && [ -t 0 ]; then
+    cd "${HA_WORKING_DIR:-/config}"
+    if [ "${HA_SKIP_PERMISSIONS:-false}" = "true" ]; then
+        claude --dangerously-skip-permissions
     else
-        BASH_CMD="${BASH_CMD}claude"
+        claude
     fi
-else
-    BASH_CMD="${BASH_CMD}exec bash"
+    # Cuando Claude termina, queda un bash interactivo normal
+    echo ""
+    echo "  Claude Code cerrado. Escribe 'claude' para volver a iniciarlo."
+    cd "${HA_WORKING_DIR:-/config}"
 fi
-
-# ==============================================================================
-# Copiar bashrc personalizado al home del usuario
-# ==============================================================================
-cp /usr/share/claude-terminal/bashrc "${HOME}/.bashrc" 2>/dev/null || true
+BASHRC_APPEND
 
 # ==============================================================================
 # Crear directorio www/floorplans si no existe
@@ -125,25 +133,31 @@ cp /usr/share/claude-terminal/bashrc "${HOME}/.bashrc" 2>/dev/null || true
 mkdir -p /config/www/floorplans 2>/dev/null || true
 
 # ==============================================================================
-# Iniciar ttyd en background (solo escucha en localhost)
+# Iniciar ttyd como shell interactiva (-i) con --base-path /terminal
+# --base-path hace que ttyd sirva sus assets bajo /terminal/... para que
+# el proxy del servidor Node.js funcione correctamente
 # ==============================================================================
 echo "[INFO] Iniciando ttyd en puerto 7681 (interno)..."
 
 ttyd \
     --port 7681 \
     --interface 127.0.0.1 \
-    --title-format "Claude Code Terminal" \
-    --theme "${THEME_JSON}" \
-    --font-size "${FONT_SIZE}" \
+    --base-path /terminal \
+    --title-format "Claude Code - Home Assistant" \
+    -t "theme=${THEME_JSON}" \
+    -t "fontSize=${FONT_SIZE}" \
+    -t "cursorBlink=true" \
+    -t "rendererType=canvas" \
     --writable \
     --max-clients 10 \
     --ping-interval 30 \
-    bash --rcfile "${HOME}/.bashrc" -c "${BASH_CMD}" &
+    bash -i &
 
 TTYD_PID=$!
 echo "[INFO] ttyd iniciado (PID: ${TTYD_PID})"
 
-sleep 2
+# Esperar a que ttyd esté listo
+sleep 3
 
 # ==============================================================================
 # Iniciar servidor web principal (editor de planos + proxy terminal)

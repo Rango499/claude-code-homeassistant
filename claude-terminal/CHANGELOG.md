@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.6] - 2026-03-23
+
+### Corregido
+- Tema y tamaño de fuente no se aplicaban: `--theme` y `--font-size` no son flags de ttyd; sustituidos por `-t theme=...` y `-t fontSize=...` (client options)
+
+## [1.0.5] - 2026-03-23
+
+### Corregido
+- Terminal en blanco: `bash --rcfile ... -c` no funciona como terminal interactivo; sustituido por `bash -i` con auto-launch desde `.bashrc`
+- WebSocket del terminal no conectaba: añadido handler `server.on('upgrade')` en el servidor HTTP para que ttyd funcione a través del proxy
+- ttyd ahora usa `--base-path /terminal` para que sus assets se sirvan correctamente bajo el proxy
+
 ## [1.0.4] - 2026-03-23
 
 ### Cambiado
