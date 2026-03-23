@@ -87,15 +87,34 @@ fi
 
 # ==============================================================================
 # Configurar directorios persistentes para la auth de Claude Code
+# El directorio /data persiste entre reinicios del addon.
+# Necesitamos que ~/.claude apunte aquí para no perder las credenciales OAuth.
 # ==============================================================================
 export HOME=/root
 export CLAUDE_CONFIG_DIR="/data/claude-config"
-mkdir -p "${CLAUDE_CONFIG_DIR}"
+mkdir -p "${CLAUDE_CONFIG_DIR}/.claude"
 
-if [ ! -L "${HOME}/.claude" ]; then
-    mkdir -p "${CLAUDE_CONFIG_DIR}/.claude"
+if [ -L "${HOME}/.claude" ]; then
+    # Ya es un symlink — verificar que apunta al sitio correcto
+    LINK_TARGET=$(readlink "${HOME}/.claude")
+    if [ "${LINK_TARGET}" != "${CLAUDE_CONFIG_DIR}/.claude" ]; then
+        echo "[INFO] Corrigiendo symlink ~/.claude (apuntaba a ${LINK_TARGET})"
+        rm -f "${HOME}/.claude"
+        ln -sf "${CLAUDE_CONFIG_DIR}/.claude" "${HOME}/.claude"
+    fi
+elif [ -d "${HOME}/.claude" ]; then
+    # Era un directorio real de una versión anterior — migrar contenidos y crear symlink
+    echo "[INFO] Migrando credenciales de ~/.claude a almacenamiento persistente..."
+    cp -a "${HOME}/.claude/." "${CLAUDE_CONFIG_DIR}/.claude/" 2>/dev/null || true
+    rm -rf "${HOME}/.claude"
+    ln -sf "${CLAUDE_CONFIG_DIR}/.claude" "${HOME}/.claude"
+    echo "[INFO] Migración completada"
+else
+    # No existe — crear symlink
     ln -sf "${CLAUDE_CONFIG_DIR}/.claude" "${HOME}/.claude"
 fi
+
+echo "[INFO] Claude config: ${HOME}/.claude → ${CLAUDE_CONFIG_DIR}/.claude"
 
 # ==============================================================================
 # Exportar variables para que el .bashrc y Node.js las usen
@@ -107,26 +126,10 @@ export HA_THEME_JSON="${THEME_JSON}"
 export HA_FONT_SIZE="${FONT_SIZE}"
 
 # ==============================================================================
-# Construir el .bashrc final combinando base + auto-launch
+# Instalar .bashrc (solo para sesiones bash manuales, sin auto-launch)
+# El auto-launch de Claude lo gestiona node-pty directamente (server/index.js)
 # ==============================================================================
 cp /usr/share/claude-terminal/bashrc "${HOME}/.bashrc"
-
-cat >> "${HOME}/.bashrc" << 'BASHRC_APPEND'
-
-# ── Auto-launch Claude Code (configurado desde el addon) ──────────────────────
-if [ "${HA_AUTO_LAUNCH:-true}" = "true" ] && [ -t 0 ]; then
-    cd "${HA_WORKING_DIR:-/config}"
-    if [ "${HA_SKIP_PERMISSIONS:-false}" = "true" ]; then
-        claude --dangerously-skip-permissions
-    else
-        claude
-    fi
-    # Cuando Claude termina, queda un bash interactivo normal
-    echo ""
-    echo "  Claude Code cerrado. Escribe 'claude' para volver a iniciarlo."
-    cd "${HA_WORKING_DIR:-/config}"
-fi
-BASHRC_APPEND
 
 # ==============================================================================
 # Crear directorio www/floorplans si no existe

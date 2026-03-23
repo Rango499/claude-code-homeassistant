@@ -96,6 +96,10 @@ COPY run.sh /run.sh
 COPY scripts/ /usr/share/claude-terminal/scripts/
 COPY server/ /usr/share/claude-terminal/server/
 
+# Eliminar CRLF de todos los scripts (red de seguridad si se commitean desde Windows)
+RUN find /usr/share/claude-terminal -type f -exec sed -i 's/\r$//' {} \; \
+    && sed -i 's/\r$//' /run.sh
+
 RUN chmod +x /run.sh \
     && chmod +x /usr/share/claude-terminal/scripts/*.sh \
     && find /etc/s6-overlay -name "run" -exec chmod +x {} \; \

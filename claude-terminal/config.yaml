@@ -1,7 +1,7 @@
 ---
 name: "Claude Code Terminal"
 description: "Terminal integrado con Claude Code CLI para gestionar Home Assistant con IA. Acceso completo al sistema de archivos, configuraciones y automatizaciones."
-version: "1.0.10"
+version: "1.0.11"
 slug: "claude_code_terminal"
 init: false
 arch:

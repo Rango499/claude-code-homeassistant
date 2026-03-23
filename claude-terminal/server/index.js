@@ -221,20 +221,35 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
 
 wss.on('connection', (ws) => {
+  // ─ Decidir qué proceso lanzar ─────────────────────────────────────────────
+  // Si auto_launch_claude=true (por defecto) → lanzar claude directamente.
+  // Esto evita depender de .bashrc para el arranque y garantiza que la URL de
+  // autenticación aparece siempre en el terminal.
+  // Si auto_launch=false → lanzar bash interactivo (el usuario escribe 'claude').
+  const autoLaunch  = (process.env.HA_AUTO_LAUNCH  || 'true')  === 'true';
+  const skipPerms   = (process.env.HA_SKIP_PERMISSIONS || 'false') === 'true';
+  const workingDir  = process.env.HA_WORKING_DIR  || '/config';
+
+  const command = autoLaunch ? 'claude' : 'bash';
+  const args    = autoLaunch
+    ? (skipPerms ? ['--dangerously-skip-permissions'] : [])
+    : ['-i'];
+
   const env = {
     ...process.env,
     TERM:      'xterm-256color',
     COLORTERM: 'truecolor',
     LANG:      'C.UTF-8',
+    HOME:      '/root',
   };
 
   let shell;
   try {
-    shell = pty.spawn('bash', ['-i'], {
+    shell = pty.spawn(command, args, {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
-      cwd:  env.HA_WORKING_DIR || '/root',
+      cwd:  workingDir,
       env,
     });
   } catch (err) {

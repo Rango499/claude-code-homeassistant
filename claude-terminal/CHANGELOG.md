@@ -1,3 +1,11 @@
+## [1.0.11] - 2026-03-24
+
+### Corregido
+- **URL de autenticación de Claude no aparecía**: `claude` era lanzado desde `.bashrc` (bash lo ejecutaba y salía), ahora `node-pty` lo lanza **directamente** como proceso del PTY — la URL OAuth aparece siempre en el terminal
+- **`bash: $'\r': command not found`**: CRLF corregido en `bashrc`; añadida red de seguridad en Dockerfile (`sed -i 's/\r$//'` sobre todos los scripts tras el COPY)
+- **Symlink `~/.claude` roto en actualizaciones**: si existía como directorio real (versiones anteriores), el symlink se creaba dentro del directorio en lugar de reemplazarlo — ahora se detectan los tres casos (symlink correcto, symlink incorrecto, directorio) y se migran las credenciales al almacenamiento persistente `/data/claude-config/.claude/`
+- Eliminado el bloque `auto-launch` del `.bashrc` — ya no es necesario porque `node-pty` lanza `claude` o `bash` directamente según la configuración `auto_launch_claude`
+
 ## [1.0.10] - 2026-03-23
 
 ### Corregido
