@@ -19,21 +19,39 @@ if [ ! -f "${OPTIONS_FILE}" ]; then
     AUTO_LAUNCH="true"
     SKIP_PERMISSIONS="false"
     WORKING_DIR="/config"
-    THEME="dark"
+    THEME_NAME="dark"
     FONT_SIZE="14"
     CUSTOM_CLAUDE_MD=""
 else
     AUTO_LAUNCH=$(jq -r '.auto_launch_claude // true' "${OPTIONS_FILE}")
     SKIP_PERMISSIONS=$(jq -r '.dangerously_skip_permissions // false' "${OPTIONS_FILE}")
     WORKING_DIR=$(jq -r '.working_directory // "/config"' "${OPTIONS_FILE}")
-    THEME=$(jq -r '.theme // "dark"' "${OPTIONS_FILE}")
+    THEME_NAME=$(jq -r '.theme // "dark"' "${OPTIONS_FILE}")
     FONT_SIZE=$(jq -r '.font_size // 14' "${OPTIONS_FILE}")
     CUSTOM_CLAUDE_MD=$(jq -r '.custom_claude_md // ""' "${OPTIONS_FILE}")
 fi
 
 echo "[INFO] Directorio de trabajo: ${WORKING_DIR}"
 echo "[INFO] Auto-launch Claude: ${AUTO_LAUNCH}"
-echo "[INFO] Tema: ${THEME}, Tamaño fuente: ${FONT_SIZE}"
+echo "[INFO] Tema: ${THEME_NAME}, Tamaño fuente: ${FONT_SIZE}"
+
+# ==============================================================================
+# Mapear nombre de tema a JSON de xterm.js (formato que entiende ttyd)
+# ==============================================================================
+case "${THEME_NAME}" in
+    light)
+        THEME_JSON='{"background":"#ffffff","foreground":"#1e1e1e","cursor":"#1e1e1e","cursorAccent":"#ffffff","selection":"rgba(0,0,0,0.2)","black":"#000000","red":"#cd3131","green":"#00bc00","yellow":"#949800","blue":"#0451a5","magenta":"#bc05bc","cyan":"#0598bc","white":"#555555","brightBlack":"#666666","brightRed":"#cd3131","brightGreen":"#14ce14","brightYellow":"#b5ba00","brightBlue":"#0451a5","brightMagenta":"#bc05bc","brightCyan":"#0598bc","brightWhite":"#a5a5a5"}'
+        ;;
+    solarized)
+        THEME_JSON='{"background":"#002b36","foreground":"#839496","cursor":"#839496","selection":"rgba(255,255,255,0.1)","black":"#073642","red":"#dc322f","green":"#859900","yellow":"#b58900","blue":"#268bd2","magenta":"#d33682","cyan":"#2aa198","white":"#eee8d5","brightBlack":"#002b36","brightRed":"#cb4b16","brightGreen":"#586e75","brightYellow":"#657b83","brightBlue":"#839496","brightMagenta":"#6c71c4","brightCyan":"#93a1a1","brightWhite":"#fdf6e3"}'
+        ;;
+    monokai)
+        THEME_JSON='{"background":"#272822","foreground":"#f8f8f2","cursor":"#f8f8f2","selection":"rgba(255,255,255,0.15)","black":"#272822","red":"#f92672","green":"#a6e22e","yellow":"#f4bf75","blue":"#66d9ef","magenta":"#ae81ff","cyan":"#a1efe4","white":"#f8f8f2","brightBlack":"#75715e","brightRed":"#f92672","brightGreen":"#a6e22e","brightYellow":"#f4bf75","brightBlue":"#66d9ef","brightMagenta":"#ae81ff","brightCyan":"#a1efe4","brightWhite":"#f9f8f5"}'
+        ;;
+    dark|*)
+        THEME_JSON='{"background":"#1e1e1e","foreground":"#d4d4d4","cursor":"#d4d4d4","selection":"rgba(255,255,255,0.15)","black":"#1e1e1e","red":"#f44747","green":"#608b4e","yellow":"#dcdcaa","blue":"#569cd6","magenta":"#c678dd","cyan":"#4ec9b0","white":"#d4d4d4","brightBlack":"#808080","brightRed":"#f44747","brightGreen":"#608b4e","brightYellow":"#dcdcaa","brightBlue":"#569cd6","brightMagenta":"#c678dd","brightCyan":"#4ec9b0","brightWhite":"#ffffff"}'
+        ;;
+esac
 
 # ==============================================================================
 # Usar /config como fallback si el directorio no existe
@@ -115,7 +133,7 @@ ttyd \
     --port 7681 \
     --interface 127.0.0.1 \
     --title-format "Claude Code Terminal" \
-    --theme "${THEME}" \
+    --theme "${THEME_JSON}" \
     --font-size "${FONT_SIZE}" \
     --writable \
     --max-clients 10 \
@@ -125,7 +143,6 @@ ttyd \
 TTYD_PID=$!
 echo "[INFO] ttyd iniciado (PID: ${TTYD_PID})"
 
-# Esperar a que ttyd arranque
 sleep 2
 
 # ==============================================================================

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.4] - 2026-03-23
+
+### Cambiado
+- Eliminada la opción `anthropic_api_key`: la autenticación es siempre via OAuth con cuenta de Anthropic, igual que en VS Code
+- Añadido banner informativo en la pestaña Terminal explicando el flujo de autenticación OAuth
+- Las credenciales OAuth se guardan en `/data/claude-config/` y persisten entre reinicios
+
+## [1.0.3] - 2026-03-23
+
+### Añadido
+- Nueva opción `anthropic_api_key` en la configuración del addon (campo password enmascarado)
+- La API key se exporta automáticamente como `ANTHROPIC_API_KEY` en el terminal
+
+### Corregido
+- Tema del terminal: mapeado correcto de nombres (dark/light/solarized/monokai) a JSON de xterm.js que entiende ttyd
+
 ## [1.0.2] - 2026-03-23
 
 ### Corregido
