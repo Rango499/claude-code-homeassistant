@@ -1,3 +1,11 @@
+## [1.0.10] - 2026-03-23
+
+### Corregido
+- **WebSocket URL compatible con HA ingress**: se construye usando `BASE_PATH` relativo a la página actual en lugar de ruta absoluta — soluciona el loop de reconexión cuando se accede al addon por el panel lateral de HA
+- **Todas las llamadas API** (`/api/...`, `/floorplans/...`) usan ahora `BASE_PATH` — funcionan correctamente a través del proxy de ingress de HA
+- **Manejo de error PTY mejorado**: si bash no puede arrancar, el terminal muestra el error en pantalla en lugar de un loop silencioso de reconexión cada 3 s
+- Reconexión más lenta (10 s) cuando hay error de servidor vs. 3 s para desconexiones normales
+
 ## [1.0.9] - 2026-03-23
 
 ### Corregido

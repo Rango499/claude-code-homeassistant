@@ -539,6 +539,17 @@ body { background: var(--bg); color: var(--text); height: 100vh; display: flex; 
 <!-- ─── JavaScript ───────────────────────────────────────────── -->
 <script>
 // ═══════════════════════════════════════════════════════════════════
+//  BASE PATH — compatible con Home Assistant ingress
+//  Cuando se accede por ingress la URL tiene prefijo:
+//    http://ha:8123/api/hassio_ingress/TOKEN/
+//  pathname.replace(/[^/]*$/, '') da ese directorio base.
+//  Cuando se accede directo (http://addon:8099/) da '/'.
+// ═══════════════════════════════════════════════════════════════════
+const BASE_PATH = window.location.pathname.replace(/[^/]*$/, '');
+// Ejemplo directo:  BASE_PATH = '/'
+// Ejemplo ingress:  BASE_PATH = '/api/hassio_ingress/TOKEN/'
+
+// ═══════════════════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════════════════
 const STATE = {
@@ -607,7 +618,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 // ═══════════════════════════════════════════════════════════════════
 async function loadEntities() {
   try {
-    const r = await fetch('/api/ha/entities');
+    const r = await fetch(BASE_PATH + 'api/ha/entities');
     if (!r.ok) throw new Error('API no disponible');
     STATE.entities = await r.json();
     document.getElementById('ha-dot').classList.remove('off');
@@ -627,14 +638,14 @@ async function loadEntities() {
 async function uploadImage(file) {
   const fd = new FormData();
   fd.append('image', file);
-  const r = await fetch('/api/floorplan/upload', { method: 'POST', body: fd });
+  const r = await fetch(BASE_PATH + 'api/floorplan/upload', { method: 'POST', body: fd });
   const data = await r.json();
   if (!data.ok) throw new Error(data.error || 'Error al subir');
   return data;
 }
 
 async function loadFloorplanList() {
-  const r = await fetch('/api/floorplan/list');
+  const r = await fetch(BASE_PATH + 'api/floorplan/list');
   const files = await r.json();
   const list = document.getElementById('floorplan-list');
   list.innerHTML = '';
@@ -649,10 +660,10 @@ async function loadFloorplanList() {
       </button>`;
     item.addEventListener('click', e => {
       if (e.target.closest('.fi-del')) return;
-      selectFloorplan(f.filename, `/floorplans/${f.filename}`);
+      selectFloorplan(f.filename, BASE_PATH + `floorplans/${f.filename}`);
     });
     item.querySelector('.fi-del').addEventListener('click', async () => {
-      await fetch(`/api/floorplan/${f.filename}`, { method: 'DELETE' });
+      await fetch(BASE_PATH + `api/floorplan/${f.filename}`, { method: 'DELETE' });
       if (STATE.currentFloorplan === f.filename) clearFloorplan();
       loadFloorplanList();
       toast('Plano eliminado', 'info');
@@ -688,7 +699,7 @@ async function handleImageFile(file) {
     const data = await uploadImage(file);
     toast(`${file.name} subida`, 'success');
     await loadFloorplanList();
-    selectFloorplan(data.filename, data.url);
+    selectFloorplan(data.filename, BASE_PATH + `floorplans/${data.filename}`);
   } catch (e) {
     toast(`Error: ${e.message}`, 'error');
   }
@@ -1054,7 +1065,7 @@ document.addEventListener('click', e => {
 // ═══════════════════════════════════════════════════════════════════
 document.getElementById('save-layout-btn').addEventListener('click', async () => {
   if (!STATE.currentFloorplan) { toast('Selecciona un plano primero', 'error'); return; }
-  await fetch('/api/layout/save', {
+  await fetch(BASE_PATH + 'api/layout/save', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ floorplan: STATE.currentFloorplan, pins: STATE.pins, name: STATE.currentFloorplan })
@@ -1063,7 +1074,7 @@ document.getElementById('save-layout-btn').addEventListener('click', async () =>
 });
 
 async function loadLayout(filename) {
-  const r = await fetch(`/api/layout/${filename}`);
+  const r = await fetch(BASE_PATH + `api/layout/${filename}`);
   const data = await r.json();
   STATE.pins = data.pins || [];
   renderAllPins();
@@ -1084,7 +1095,7 @@ document.getElementById('export-yaml-btn').addEventListener('click', async () =>
   if (!STATE.currentFloorplan) { toast('Selecciona un plano primero', 'error'); return; }
   if (!STATE.pins.length) { toast('Añade al menos un elemento', 'error'); return; }
 
-  const r = await fetch('/api/generate/yaml', {
+  const r = await fetch(BASE_PATH + 'api/generate/yaml', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ floorplan: STATE.currentFloorplan, pins: STATE.pins, title: STATE.currentFloorplan.replace(/\.[^.]+$/, '') })
@@ -1110,7 +1121,7 @@ document.getElementById('copy-yaml-btn').addEventListener('click', () => {
 document.getElementById('save-yaml-btn').addEventListener('click', async () => {
   const content = document.getElementById('yaml-output').value;
   const filename = STATE.currentFloorplan.replace(/\.[^.]+$/, '') + '-lovelace';
-  const r = await fetch('/api/save/yaml', {
+  const r = await fetch(BASE_PATH + 'api/save/yaml', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filename, content })
@@ -1158,7 +1169,7 @@ showPropsEmpty();
     // Leer configuración de tema y fuente desde el servidor
     let cfg = { theme: {}, fontSize: 14 };
     try {
-      const r = await fetch('/api/config');
+      const r = await fetch(BASE_PATH + 'api/config');
       if (r.ok) cfg = await r.json();
     } catch (_) {}
 
@@ -1201,23 +1212,33 @@ showPropsEmpty();
   }
 
   // ── Conexión WebSocket con servidor node-pty ───────────────────────────
+  // La URL usa BASE_PATH para ser compatible con HA ingress:
+  //   Ingress:  wss://ha:8123/api/hassio_ingress/TOKEN/terminal/ws
+  //   Directo:  ws://addon:8099/terminal/ws
   function connect() {
     clearTimeout(reconnectTimer);
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url   = proto + '//' + location.host + '/terminal/ws';
+    const proto   = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsBase  = BASE_PATH.replace(/\/$/, '');   // quitar trailing slash
+    const url     = proto + '//' + location.host + wsBase + '/terminal/ws';
 
     setStatus(false, 'Conectando...');
-    ws = new WebSocket(url);
+
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      setStatus(false, 'Error al crear WebSocket');
+      term.write(`\r\n\x1b[31m[Error WebSocket: ${e.message}]\x1b[0m\r\n`);
+      reconnectTimer = setTimeout(connect, 5000);
+      return;
+    }
 
     ws.onopen = () => {
-      // Protocolo propio node-pty: solo enviar tamaño inicial
       fitAddon.fit();
       sendResize();
       setStatus(true, 'Conectado · Claude Code Terminal');
     };
 
     ws.onmessage = (evt) => {
-      // El servidor envía stdout directamente como texto
       if (evt.data instanceof ArrayBuffer) {
         term.write(new Uint8Array(evt.data));
       } else {
@@ -1225,14 +1246,20 @@ showPropsEmpty();
       }
     };
 
-    ws.onclose = () => {
-      setStatus(false, 'Desconectado — reconectando en 3 s…');
-      term.write('\r\n\x1b[33m[Terminal desconectado. Reconectando...]\x1b[0m\r\n');
-      reconnectTimer = setTimeout(connect, 3000);
+    ws.onclose = (evt) => {
+      // Código 1011 = error interno del servidor (PTY no pudo arrancar)
+      if (evt.code === 1011) {
+        setStatus(false, 'Error en el servidor — reintentando en 10 s');
+        reconnectTimer = setTimeout(connect, 10000);
+      } else {
+        setStatus(false, 'Desconectado — reconectando en 3 s…');
+        term.write('\r\n\x1b[33m[Terminal desconectado. Reconectando...]\x1b[0m\r\n');
+        reconnectTimer = setTimeout(connect, 3000);
+      }
     };
 
     ws.onerror = () => {
-      setStatus(false, 'Error de conexión');
+      setStatus(false, 'Error de conexión WebSocket');
     };
   }
 

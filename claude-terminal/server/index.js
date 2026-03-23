@@ -228,13 +228,22 @@ wss.on('connection', (ws) => {
     LANG:      'C.UTF-8',
   };
 
-  const shell = pty.spawn('bash', ['-i'], {
-    name: 'xterm-256color',
-    cols: 80,
-    rows: 24,
-    cwd:  env.HA_WORKING_DIR || '/config',
-    env,
-  });
+  let shell;
+  try {
+    shell = pty.spawn('bash', ['-i'], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd:  env.HA_WORKING_DIR || '/root',
+      env,
+    });
+  } catch (err) {
+    console.error('[PTY] Error al arrancar bash:', err.message);
+    const msg = `\r\n\x1b[31m[ERROR] No se pudo iniciar el terminal:\r\n${err.message}\x1b[0m\r\n`;
+    ws.send(msg);
+    ws.close(1011, 'PTY spawn failed');
+    return;
+  }
 
   console.log(`[PTY] Nueva sesión bash (PID ${shell.pid})`);
 
