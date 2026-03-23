@@ -1,66 +1,80 @@
-#!/usr/bin/with-contenv bashio
+#!/usr/bin/env bash
 # ==============================================================================
 # Home Assistant Add-on: Claude Code Terminal
 # Script principal de arranque
+# Lee la configuración directamente desde /data/options.json con jq
 # ==============================================================================
 
 set -e
 
-bashio::log.info "Iniciando Claude Code Terminal..."
+echo "[INFO] Iniciando Claude Code Terminal..."
 
 # ==============================================================================
-# Leer configuración del addon
+# Leer configuración del addon desde /data/options.json
 # ==============================================================================
-AUTO_LAUNCH=$(bashio::config 'auto_launch_claude')
-SKIP_PERMISSIONS=$(bashio::config 'dangerously_skip_permissions')
-WORKING_DIR=$(bashio::config 'working_directory')
-THEME=$(bashio::config 'theme')
-FONT_SIZE=$(bashio::config 'font_size')
-CUSTOM_CLAUDE_MD=$(bashio::config 'custom_claude_md')
+OPTIONS_FILE="/data/options.json"
 
-bashio::log.info "Directorio de trabajo: ${WORKING_DIR}"
-bashio::log.info "Auto-launch Claude: ${AUTO_LAUNCH}"
-bashio::log.info "Tema: ${THEME}, Tamaño fuente: ${FONT_SIZE}"
+if [ ! -f "${OPTIONS_FILE}" ]; then
+    echo "[WARNING] No se encontró ${OPTIONS_FILE}, usando valores por defecto"
+    AUTO_LAUNCH="true"
+    SKIP_PERMISSIONS="false"
+    WORKING_DIR="/config"
+    THEME="dark"
+    FONT_SIZE="14"
+    CUSTOM_CLAUDE_MD=""
+else
+    AUTO_LAUNCH=$(jq -r '.auto_launch_claude // true' "${OPTIONS_FILE}")
+    SKIP_PERMISSIONS=$(jq -r '.dangerously_skip_permissions // false' "${OPTIONS_FILE}")
+    WORKING_DIR=$(jq -r '.working_directory // "/config"' "${OPTIONS_FILE}")
+    THEME=$(jq -r '.theme // "dark"' "${OPTIONS_FILE}")
+    FONT_SIZE=$(jq -r '.font_size // 14' "${OPTIONS_FILE}")
+    CUSTOM_CLAUDE_MD=$(jq -r '.custom_claude_md // ""' "${OPTIONS_FILE}")
+fi
+
+echo "[INFO] Directorio de trabajo: ${WORKING_DIR}"
+echo "[INFO] Auto-launch Claude: ${AUTO_LAUNCH}"
+echo "[INFO] Tema: ${THEME}, Tamaño fuente: ${FONT_SIZE}"
 
 # ==============================================================================
-# Crear directorio de trabajo si no existe
+# Usar /config como fallback si el directorio no existe
 # ==============================================================================
 if [ ! -d "${WORKING_DIR}" ]; then
-    bashio::log.warning "El directorio ${WORKING_DIR} no existe, usando /config"
+    echo "[WARNING] El directorio ${WORKING_DIR} no existe, usando /config"
     WORKING_DIR="/config"
 fi
 
 # ==============================================================================
 # Instalar paquetes adicionales del sistema (configurados por el usuario)
 # ==============================================================================
-EXTRA_PACKAGES=$(bashio::config 'extra_packages')
-if [ -n "${EXTRA_PACKAGES}" ] && [ "${EXTRA_PACKAGES}" != "[]" ]; then
-    bashio::log.info "Instalando paquetes adicionales del sistema..."
-    echo "${EXTRA_PACKAGES}" | jq -r '.[]' | xargs -r apt-get install -y --no-install-recommends
+EXTRA_PACKAGES=$(jq -r '.extra_packages // [] | .[]' "${OPTIONS_FILE}" 2>/dev/null || true)
+if [ -n "${EXTRA_PACKAGES}" ]; then
+    echo "[INFO] Instalando paquetes adicionales del sistema..."
+    apt-get update -qq
+    echo "${EXTRA_PACKAGES}" | xargs -r apt-get install -y --no-install-recommends -qq
+    rm -rf /var/lib/apt/lists/*
 fi
 
 # ==============================================================================
 # Instalar paquetes adicionales de Python (configurados por el usuario)
 # ==============================================================================
-EXTRA_PIP=$(bashio::config 'extra_pip_packages')
-if [ -n "${EXTRA_PIP}" ] && [ "${EXTRA_PIP}" != "[]" ]; then
-    bashio::log.info "Instalando paquetes pip adicionales..."
-    echo "${EXTRA_PIP}" | jq -r '.[]' | xargs -r pip3 install --no-cache-dir --break-system-packages
+EXTRA_PIP=$(jq -r '.extra_pip_packages // [] | .[]' "${OPTIONS_FILE}" 2>/dev/null || true)
+if [ -n "${EXTRA_PIP}" ]; then
+    echo "[INFO] Instalando paquetes pip adicionales..."
+    echo "${EXTRA_PIP}" | xargs -r pip3 install --no-cache-dir --break-system-packages -q
 fi
 
 # ==============================================================================
 # Configurar CLAUDE.md con contexto de Home Assistant
 # ==============================================================================
-/usr/share/claude-terminal/scripts/setup-claude-md.sh "${WORKING_DIR}" "${CUSTOM_CLAUDE_MD}"
+/usr/share/claude-terminal/scripts/setup-claude-md.sh "${WORKING_DIR}" "${CUSTOM_CLAUDE_MD}" || true
 
 # ==============================================================================
-# Configurar variables de entorno para Claude Code
+# Configurar directorios persistentes para la auth de Claude Code
 # ==============================================================================
 export HOME=/root
 export CLAUDE_CONFIG_DIR="/data/claude-config"
 mkdir -p "${CLAUDE_CONFIG_DIR}"
 
-# Symlink para que Claude Code persista la auth entre reinicios
 if [ ! -L "${HOME}/.claude" ]; then
     mkdir -p "${CLAUDE_CONFIG_DIR}/.claude"
     ln -sf "${CLAUDE_CONFIG_DIR}/.claude" "${HOME}/.claude"
@@ -73,21 +87,30 @@ BASH_CMD="cd ${WORKING_DIR} && "
 
 if [ "${AUTO_LAUNCH}" = "true" ]; then
     if [ "${SKIP_PERMISSIONS}" = "true" ]; then
-        bashio::log.warning "Modo dangerously_skip_permissions activado - Claude Code tendrá acceso total"
-        BASH_CMD="${BASH_CMD} claude --dangerously-skip-permissions"
+        echo "[WARNING] Modo dangerously_skip_permissions activado"
+        BASH_CMD="${BASH_CMD}claude --dangerously-skip-permissions"
     else
-        BASH_CMD="${BASH_CMD} claude"
+        BASH_CMD="${BASH_CMD}claude"
     fi
 else
-    # Solo abrir bash normal en el directorio correcto
-    BASH_CMD="${BASH_CMD} exec bash"
+    BASH_CMD="${BASH_CMD}exec bash"
 fi
 
-bashio::log.info "Iniciando ttyd en puerto 7681 (interno)..."
+# ==============================================================================
+# Copiar bashrc personalizado al home del usuario
+# ==============================================================================
+cp /usr/share/claude-terminal/bashrc "${HOME}/.bashrc" 2>/dev/null || true
 
 # ==============================================================================
-# Iniciar ttyd en background (accedido via proxy desde el servidor principal)
+# Crear directorio www/floorplans si no existe
 # ==============================================================================
+mkdir -p /config/www/floorplans 2>/dev/null || true
+
+# ==============================================================================
+# Iniciar ttyd en background (solo escucha en localhost)
+# ==============================================================================
+echo "[INFO] Iniciando ttyd en puerto 7681 (interno)..."
+
 ttyd \
     --port 7681 \
     --interface 127.0.0.1 \
@@ -97,10 +120,10 @@ ttyd \
     --writable \
     --max-clients 10 \
     --ping-interval 30 \
-    bash -c "${BASH_CMD}" &
+    bash --rcfile "${HOME}/.bashrc" -c "${BASH_CMD}" &
 
 TTYD_PID=$!
-bashio::log.info "ttyd iniciado (PID: ${TTYD_PID})"
+echo "[INFO] ttyd iniciado (PID: ${TTYD_PID})"
 
 # Esperar a que ttyd arranque
 sleep 2
@@ -108,7 +131,7 @@ sleep 2
 # ==============================================================================
 # Iniciar servidor web principal (editor de planos + proxy terminal)
 # ==============================================================================
-bashio::log.info "Iniciando interfaz principal en puerto 8099..."
+echo "[INFO] Iniciando interfaz principal en puerto 8099..."
 export UI_PORT=8099
 
 exec node /usr/share/claude-terminal/server/index.js
