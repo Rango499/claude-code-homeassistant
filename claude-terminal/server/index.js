@@ -16,13 +16,17 @@ const app  = express();
 const PORT = process.env.UI_PORT || 8099;
 
 // ─── Rutas de archivos ────────────────────────────────────────────────────────
+// Las variables de entorno permiten sobreescribir las rutas en test local
 const HA_TOKEN       = process.env.SUPERVISOR_TOKEN || '';
 const HA_API         = 'http://supervisor/core/api';
-const FLOORPLANS_DIR = '/config/www/floorplans';
-const LAYOUTS_FILE   = '/data/floorplan-layouts.json';
-const WEB_DIR        = path.join(__dirname, '..', 'web');
+const FLOORPLANS_DIR = process.env.FLOORPLANS_DIR || '/config/www/floorplans';
+const LAYOUTS_FILE   = process.env.LAYOUTS_FILE   || '/data/floorplan-layouts.json';
+const DATA_DIR       = path.dirname(LAYOUTS_FILE);
+// En el contenedor: /usr/share/claude-terminal/web (COPY rootfs → /)
+// En test local:   rootfs/usr/share/claude-terminal/web  (override con WEB_DIR)
+const WEB_DIR = process.env.WEB_DIR || path.join(__dirname, '..', 'web');
 
-[FLOORPLANS_DIR, '/data'].forEach(d => {
+[FLOORPLANS_DIR, DATA_DIR].forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
