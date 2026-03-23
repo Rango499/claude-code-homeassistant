@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.2] - 2026-03-23
+
+### Corregido
+- `server/index.js`: ruta al directorio web incorrecta dentro del contenedor (causaba `ENOENT: no such file or directory`)
+
 ## [1.0.1] - 2026-03-23
 
 ### Corregido

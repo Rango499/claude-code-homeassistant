@@ -18,7 +18,7 @@ const HA_TOKEN      = process.env.SUPERVISOR_TOKEN || '';
 const HA_API        = 'http://supervisor/core/api';
 const FLOORPLANS_DIR = '/config/www/floorplans';
 const LAYOUTS_FILE  = '/data/floorplan-layouts.json';
-const WEB_DIR       = path.join(__dirname, '..', 'rootfs', 'usr', 'share', 'claude-terminal', 'web');
+const WEB_DIR       = path.join(__dirname, '..', 'web');
 
 // Crear directorios si no existen
 [FLOORPLANS_DIR, '/data'].forEach(d => {
