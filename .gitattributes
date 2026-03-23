@@ -1,0 +1,26 @@
+# Forzar LF para todos los archivos de texto
+# Evita que Git en Windows convierta los saltos de línea a CRLF
+# (los contenedores Linux no entienden CRLF en scripts de shell)
+
+* text=auto eol=lf
+
+# Archivos que SIEMPRE deben ser LF
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.js        text eol=lf
+*.html      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.env       text eol=lf
+Dockerfile  text eol=lf
+
+# Archivos binarios — no tocar
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.svg       binary

@@ -1,3 +1,9 @@
+## [1.0.7] - 2026-03-23
+
+### Corregido
+- Saltos de línea Windows (CRLF) en scripts de shell causaban `bash\r: No such file or directory` y segfault de ttyd
+- Añadido `.gitattributes` que fuerza LF en todos los archivos de texto
+
 # Changelog
 
 ## [1.0.6] - 2026-03-23
