@@ -559,6 +559,22 @@ const BASE_PATH = window.location.pathname.replace(/[^/]*$/, '');
 // Ejemplo directo:  BASE_PATH = '/'
 // Ejemplo ingress:  BASE_PATH = '/api/hassio_ingress/TOKEN/'
 
+// ─── Tema: aplicar CSS vars al cargar la página ───────────────────────────
+// Se cachea en window.__addonConfig para no hacer dos fetch (UI + terminal).
+window.__addonConfig = null;
+(async function applyTheme() {
+  try {
+    const r = await fetch(BASE_PATH + 'api/config');
+    if (!r.ok) return;
+    const cfg = await r.json();
+    window.__addonConfig = cfg;
+    if (cfg.uiVars) {
+      const root = document.documentElement;
+      Object.entries(cfg.uiVars).forEach(([k, v]) => root.style.setProperty(k, v));
+    }
+  } catch (_) {}
+})();
+
 // ═══════════════════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════════════════
@@ -1176,12 +1192,14 @@ showPropsEmpty();
     if (initialized) return;
     initialized = true;
 
-    // Leer configuración de tema y fuente desde el servidor
-    let cfg = { theme: {}, fontSize: 14 };
-    try {
-      const r = await fetch(BASE_PATH + 'api/config');
-      if (r.ok) cfg = await r.json();
-    } catch (_) {}
+    // Usar la config ya cargada por applyTheme() (evita un fetch extra)
+    let cfg = window.__addonConfig || { theme: {}, fontSize: 14 };
+    if (!window.__addonConfig) {
+      try {
+        const r = await fetch(BASE_PATH + 'api/config');
+        if (r.ok) cfg = await r.json();
+      } catch (_) {}
+    }
 
     term = new Terminal({
       theme:           cfg.theme,

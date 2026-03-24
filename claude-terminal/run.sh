@@ -39,16 +39,17 @@ echo "[INFO] Tema: ${THEME_NAME}, Tamaño fuente: ${FONT_SIZE}"
 # ==============================================================================
 case "${THEME_NAME}" in
     light)
-        THEME_JSON='{"background":"#ffffff","foreground":"#1e1e1e","cursor":"#1e1e1e","cursorAccent":"#ffffff","selection":"rgba(0,0,0,0.2)","black":"#000000","red":"#cd3131","green":"#00bc00","yellow":"#949800","blue":"#0451a5","magenta":"#bc05bc","cyan":"#0598bc","white":"#555555","brightBlack":"#666666","brightRed":"#cd3131","brightGreen":"#14ce14","brightYellow":"#b5ba00","brightBlue":"#0451a5","brightMagenta":"#bc05bc","brightCyan":"#0598bc","brightWhite":"#a5a5a5"}'
+        # xterm.js v5: la propiedad correcta es selectionBackground (no selection)
+        THEME_JSON='{"background":"#ffffff","foreground":"#1e1e1e","cursor":"#1e1e1e","cursorAccent":"#ffffff","selectionBackground":"#add6ff","selectionForeground":"#1e1e1e","black":"#000000","red":"#cd3131","green":"#00bc00","yellow":"#949800","blue":"#0451a5","magenta":"#bc05bc","cyan":"#0598bc","white":"#555555","brightBlack":"#666666","brightRed":"#cd3131","brightGreen":"#14ce14","brightYellow":"#b5ba00","brightBlue":"#0451a5","brightMagenta":"#bc05bc","brightCyan":"#0598bc","brightWhite":"#a5a5a5"}'
         ;;
     solarized)
-        THEME_JSON='{"background":"#002b36","foreground":"#839496","cursor":"#839496","selection":"rgba(255,255,255,0.1)","black":"#073642","red":"#dc322f","green":"#859900","yellow":"#b58900","blue":"#268bd2","magenta":"#d33682","cyan":"#2aa198","white":"#eee8d5","brightBlack":"#002b36","brightRed":"#cb4b16","brightGreen":"#586e75","brightYellow":"#657b83","brightBlue":"#839496","brightMagenta":"#6c71c4","brightCyan":"#93a1a1","brightWhite":"#fdf6e3"}'
+        THEME_JSON='{"background":"#002b36","foreground":"#839496","cursor":"#839496","selectionBackground":"#1f5068","selectionForeground":"#eee8d5","black":"#073642","red":"#dc322f","green":"#859900","yellow":"#b58900","blue":"#268bd2","magenta":"#d33682","cyan":"#2aa198","white":"#eee8d5","brightBlack":"#002b36","brightRed":"#cb4b16","brightGreen":"#586e75","brightYellow":"#657b83","brightBlue":"#839496","brightMagenta":"#6c71c4","brightCyan":"#93a1a1","brightWhite":"#fdf6e3"}'
         ;;
     monokai)
-        THEME_JSON='{"background":"#272822","foreground":"#f8f8f2","cursor":"#f8f8f2","selection":"rgba(255,255,255,0.15)","black":"#272822","red":"#f92672","green":"#a6e22e","yellow":"#f4bf75","blue":"#66d9ef","magenta":"#ae81ff","cyan":"#a1efe4","white":"#f8f8f2","brightBlack":"#75715e","brightRed":"#f92672","brightGreen":"#a6e22e","brightYellow":"#f4bf75","brightBlue":"#66d9ef","brightMagenta":"#ae81ff","brightCyan":"#a1efe4","brightWhite":"#f9f8f5"}'
+        THEME_JSON='{"background":"#272822","foreground":"#f8f8f2","cursor":"#f8f8f2","selectionBackground":"#6e6033","selectionForeground":"#f8f8f2","black":"#272822","red":"#f92672","green":"#a6e22e","yellow":"#f4bf75","blue":"#66d9ef","magenta":"#ae81ff","cyan":"#a1efe4","white":"#f8f8f2","brightBlack":"#75715e","brightRed":"#f92672","brightGreen":"#a6e22e","brightYellow":"#f4bf75","brightBlue":"#66d9ef","brightMagenta":"#ae81ff","brightCyan":"#a1efe4","brightWhite":"#f9f8f5"}'
         ;;
     dark|*)
-        THEME_JSON='{"background":"#1e1e1e","foreground":"#d4d4d4","cursor":"#d4d4d4","selection":"rgba(255,255,255,0.15)","black":"#1e1e1e","red":"#f44747","green":"#608b4e","yellow":"#dcdcaa","blue":"#569cd6","magenta":"#c678dd","cyan":"#4ec9b0","white":"#d4d4d4","brightBlack":"#808080","brightRed":"#f44747","brightGreen":"#608b4e","brightYellow":"#dcdcaa","brightBlue":"#569cd6","brightMagenta":"#c678dd","brightCyan":"#4ec9b0","brightWhite":"#ffffff"}'
+        THEME_JSON='{"background":"#1e1e1e","foreground":"#d4d4d4","cursor":"#d4d4d4","selectionBackground":"#264f78","selectionForeground":"#ffffff","black":"#1e1e1e","red":"#f44747","green":"#608b4e","yellow":"#dcdcaa","blue":"#569cd6","magenta":"#c678dd","cyan":"#4ec9b0","white":"#d4d4d4","brightBlack":"#808080","brightRed":"#f44747","brightGreen":"#608b4e","brightYellow":"#dcdcaa","brightBlue":"#569cd6","brightMagenta":"#c678dd","brightCyan":"#4ec9b0","brightWhite":"#ffffff"}'
         ;;
 esac
 
@@ -122,6 +123,7 @@ echo "[INFO] Claude config: ${HOME}/.claude → ${CLAUDE_CONFIG_DIR}/.claude"
 export HA_AUTO_LAUNCH="${AUTO_LAUNCH}"
 export HA_SKIP_PERMISSIONS="${SKIP_PERMISSIONS}"
 export HA_WORKING_DIR="${WORKING_DIR}"
+export HA_THEME_NAME="${THEME_NAME}"
 export HA_THEME_JSON="${THEME_JSON}"
 export HA_FONT_SIZE="${FONT_SIZE}"
 

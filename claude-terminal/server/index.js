@@ -52,13 +52,44 @@ const upload = multer({
   }
 });
 
-// ─── API: Configuración del addon (tema + fuente para xterm.js) ──────────────
+// ─── Variables CSS de la UI por tema ─────────────────────────────────────────
+// Permiten que toda la interfaz (no solo el terminal xterm) cambie con el tema.
+const UI_THEMES = {
+  dark: {
+    '--bg': '#0f1117', '--surface': '#1a1d2e', '--surface2': '#242740',
+    '--border': '#2e3150', '--accent': '#6c63ff', '--accent2': '#03a9f4',
+    '--success': '#4caf50', '--warning': '#ff9800', '--danger': '#f44336',
+    '--text': '#e0e0f0', '--muted': '#7c7fa0'
+  },
+  light: {
+    '--bg': '#f0f2f7', '--surface': '#ffffff', '--surface2': '#e8eaf0',
+    '--border': '#d0d4e8', '--accent': '#6c63ff', '--accent2': '#0288d1',
+    '--success': '#388e3c', '--warning': '#f57c00', '--danger': '#d32f2f',
+    '--text': '#1a1a2e', '--muted': '#6b6e8a'
+  },
+  solarized: {
+    '--bg': '#002b36', '--surface': '#073642', '--surface2': '#0a4555',
+    '--border': '#1a5564', '--accent': '#268bd2', '--accent2': '#2aa198',
+    '--success': '#859900', '--warning': '#b58900', '--danger': '#dc322f',
+    '--text': '#839496', '--muted': '#586e75'
+  },
+  monokai: {
+    '--bg': '#272822', '--surface': '#3e3d32', '--surface2': '#49483e',
+    '--border': '#5a5950', '--accent': '#a6e22e', '--accent2': '#66d9ef',
+    '--success': '#a6e22e', '--warning': '#f4bf75', '--danger': '#f92672',
+    '--text': '#f8f8f2', '--muted': '#75715e'
+  }
+};
+
+// ─── API: Configuración del addon (tema + fuente para xterm.js y UI) ─────────
 app.get('/api/config', (req, res) => {
   let theme = {};
   try { theme = JSON.parse(process.env.HA_THEME_JSON || '{}'); } catch {}
+  const themeName = process.env.HA_THEME_NAME || 'dark';
   res.json({
     theme,
-    fontSize: parseInt(process.env.HA_FONT_SIZE || '14', 10)
+    fontSize: parseInt(process.env.HA_FONT_SIZE || '14', 10),
+    uiVars: UI_THEMES[themeName] || UI_THEMES.dark
   });
 });
 
