@@ -45,6 +45,28 @@ export EDITOR=nano
 export VISUAL=nano
 export HA_CONFIG_DIR="/config"
 
+# ==============================================================================
+# Wrapper de claude: en dispositivos con poca RAM muestra aviso si la memoria
+# disponible es crítica antes de lanzar el proceso.
+# En RPi 4 / amd64 (HA_LOW_MEMORY=false) se ejecuta claude directamente.
+# ==============================================================================
+claude() {
+    if [ "${HA_LOW_MEMORY}" = "true" ]; then
+        local AVAIL_MB
+        AVAIL_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo "999")
+        if [ "${AVAIL_MB}" -lt 250 ]; then
+            echo ""
+            echo "  ⚠️  Memoria disponible: ${AVAIL_MB}MB — muy poca para Claude Code"
+            echo "  Para evitar que se cierre, activa el swap en Home Assistant:"
+            echo "  Ajustes → Sistema → Hardware → Memoria swap"
+            echo ""
+            read -r -p "  ¿Intentar de todas formas? [s/N] " resp
+            [[ "${resp,,}" != "s" ]] && return 1
+        fi
+    fi
+    command claude "$@"
+}
+
 # Mostrar bienvenida
 clear
 echo ""
@@ -57,6 +79,15 @@ echo "  🔧 Comandos HA: escribe 'ha-help' para ver opciones"
 echo "  🤖 Claude Code: escribe 'claude' para iniciar"
 echo "  📚 Archivos: /config/automations.yaml, configuration.yaml..."
 echo ""
+
+# Aviso adicional solo en dispositivos con poca RAM (RPi 3 y similares)
+if [ "${HA_LOW_MEMORY}" = "true" ]; then
+    AVAIL_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo "0")
+    echo "  ⚠️  Modo bajo consumo activo — RAM disponible: ${AVAIL_MB}MB"
+    echo "  Si claude se cierra solo, activa swap en Ajustes → Sistema → Hardware"
+    echo ""
+fi
+
 echo "  Consejos:"
 echo "  • usa 'ha-backup' antes de hacer cambios importantes"
 echo "  • usa 'ha-check' para validar la configuración"

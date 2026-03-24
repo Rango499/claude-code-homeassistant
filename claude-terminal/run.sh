@@ -146,4 +146,24 @@ mkdir -p /config/www/floorplans 2>/dev/null || true
 echo "[INFO] Iniciando servidor (UI + terminal PTY) en puerto 8099..."
 export UI_PORT=8099
 
-exec node --max-old-space-size=150 /usr/share/claude-terminal/server/index.js
+# ==============================================================================
+# Detectar RAM y ajustar límites de memoria solo en dispositivos con poca RAM.
+# RPi 3  ≈ 1 GB  →  modo bajo consumo (límites estrictos)
+# RPi 4 / amd64 ≥ 2 GB  →  modo normal (sin restricciones extra)
+# ==============================================================================
+TOTAL_RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo "2048")
+
+if [ "${TOTAL_RAM_MB}" -lt 1500 ]; then
+    echo "[INFO] RAM detectada: ${TOTAL_RAM_MB}MB — modo bajo consumo (RPi 3)"
+    # NODE_OPTIONS lo heredan bash y todos sus hijos (incluido claude).
+    # El servidor sobreescribe este valor con su propio --max-old-space-size.
+    export NODE_OPTIONS="--max-old-space-size=200"
+    export HA_LOW_MEMORY="true"
+    SERVER_HEAP=100
+else
+    echo "[INFO] RAM detectada: ${TOTAL_RAM_MB}MB — modo normal"
+    export HA_LOW_MEMORY="false"
+    SERVER_HEAP=256
+fi
+
+exec node --max-old-space-size=${SERVER_HEAP} /usr/share/claude-terminal/server/index.js
