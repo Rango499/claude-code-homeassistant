@@ -7,8 +7,6 @@ const path    = require('path');
 const fs      = require('fs');
 const fetch   = require('node-fetch');
 const yaml    = require('js-yaml');
-const cors    = require('cors');
-const morgan  = require('morgan');
 const pty     = require('node-pty');
 const WebSocket = require('ws');
 
@@ -31,8 +29,6 @@ const WEB_DIR = process.env.WEB_DIR || path.join(__dirname, '..', 'web');
 });
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors());
-app.use(morgan('tiny'));
 app.use(express.json({ limit: '50mb' }));
 
 // ─── Archivos estáticos (planos y SPA) ───────────────────────────────────────
@@ -221,19 +217,9 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
 
 wss.on('connection', (ws) => {
-  // ─ Decidir qué proceso lanzar ─────────────────────────────────────────────
-  // Si auto_launch_claude=true (por defecto) → lanzar claude directamente.
-  // Esto evita depender de .bashrc para el arranque y garantiza que la URL de
-  // autenticación aparece siempre en el terminal.
-  // Si auto_launch=false → lanzar bash interactivo (el usuario escribe 'claude').
-  const autoLaunch  = (process.env.HA_AUTO_LAUNCH  || 'true')  === 'true';
-  const skipPerms   = (process.env.HA_SKIP_PERMISSIONS || 'false') === 'true';
-  const workingDir  = process.env.HA_WORKING_DIR  || '/config';
-
-  const command = autoLaunch ? 'claude' : 'bash';
-  const args    = autoLaunch
-    ? (skipPerms ? ['--dangerously-skip-permissions'] : [])
-    : ['-i'];
+  // Siempre arrancamos bash. El usuario lanza 'claude' cuando quiera.
+  // Lanzar claude directamente en RPi 3 consume demasiada RAM y activa el OOM killer.
+  const workingDir = process.env.HA_WORKING_DIR || '/config';
 
   const env = {
     ...process.env,
@@ -245,7 +231,7 @@ wss.on('connection', (ws) => {
 
   let shell;
   try {
-    shell = pty.spawn(command, args, {
+    shell = pty.spawn('bash', ['-i'], {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
@@ -276,18 +262,22 @@ wss.on('connection', (ws) => {
   });
 
   // Cliente → bash
+  // Optimización: solo intentamos JSON.parse si el mensaje empieza por '{'
+  // (los resize messages), evitando el coste en cada pulsación de tecla.
   ws.on('message', (data) => {
     const str = typeof data === 'string' ? data : data.toString('utf8');
-    try {
-      const msg = JSON.parse(str);
-      if (msg.type === 'resize') {
-        const cols = Math.max(1, Math.min(500, msg.cols || 80));
-        const rows = Math.max(1, Math.min(200, msg.rows || 24));
-        shell.resize(cols, rows);
-        return;
-      }
-    } catch {}
-    // No es JSON → stdin normal
+    if (str.charCodeAt(0) === 123) { // '{'
+      try {
+        const msg = JSON.parse(str);
+        if (msg.type === 'resize') {
+          const cols = Math.max(1, Math.min(500, msg.cols || 80));
+          const rows = Math.max(1, Math.min(200, msg.rows || 24));
+          shell.resize(cols, rows);
+          return;
+        }
+      } catch {}
+    }
+    // stdin normal
     shell.write(str);
   });
 

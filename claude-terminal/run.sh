@@ -144,4 +144,4 @@ mkdir -p /config/www/floorplans 2>/dev/null || true
 echo "[INFO] Iniciando servidor (UI + terminal PTY) en puerto 8099..."
 export UI_PORT=8099
 
-exec node /usr/share/claude-terminal/server/index.js
+exec node --max-old-space-size=150 /usr/share/claude-terminal/server/index.js
