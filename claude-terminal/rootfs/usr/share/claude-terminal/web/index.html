@@ -143,6 +143,11 @@ body { background: var(--bg); color: var(--text); height: 100vh; display: flex; 
 }
 #terminal-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex-shrink: 0; }
 #terminal-status .dot.connected { background: var(--success); }
+#terminal-status .kbd-hint { margin-left: auto; display: flex; gap: 10px; opacity: .6; font-size: 10px; }
+#terminal-status .kbd-hint kbd {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 5px; font-family: monospace; font-size: 10px;
+}
 
 /* ─── Formulario de propiedades ──────────────────────────────── */
 .form-group { padding: 10px 14px; border-bottom: 1px solid var(--border); }
@@ -498,6 +503,11 @@ body { background: var(--bg); color: var(--text); height: 100vh; display: flex; 
     <div id="terminal-status">
       <span class="dot" id="term-dot"></span>
       <span id="term-status-text">Conectando...</span>
+      <span class="kbd-hint">
+        <span>Seleccionar → copia</span>
+        <span><kbd>Ctrl+V</kbd> pegar</span>
+        <span><kbd>Ctrl+⇧+C</kbd> copiar</span>
+      </span>
     </div>
     <div id="terminal-container"></div>
   </div>
@@ -1200,6 +1210,46 @@ showPropsEmpty();
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(data);   // stdin directo — sin prefijo (protocolo node-pty propio)
       }
+    });
+
+    // ── Portapapeles ──────────────────────────────────────────────────────
+    // Ctrl+V          → pegar desde portapapeles del sistema
+    // Ctrl+Shift+C    → copiar selección actual
+    // Seleccionar txt → auto-copiar al portapapeles (sin Ctrl+C)
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true;
+
+      // Ctrl+V → pegar (no enviar ^V al proceso)
+      if (e.ctrlKey && !e.shiftKey && e.code === 'KeyV') {
+        navigator.clipboard.readText().then(text => {
+          if (text && ws && ws.readyState === WebSocket.OPEN) ws.send(text);
+        }).catch(() => {});
+        return false;
+      }
+
+      // Ctrl+Shift+C → copiar selección
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
+        if (term.hasSelection()) {
+          navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+          toast('Copiado al portapapeles', 'success');
+        }
+        return false;
+      }
+
+      return true;
+    });
+
+    // Auto-copiar al seleccionar texto con el ratón
+    term.onSelectionChange(() => {
+      const sel = term.getSelection();
+      if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+    });
+
+    // Soporte para pegar con ratón (clic derecho → Pegar del navegador)
+    container.addEventListener('paste', (e) => {
+      e.stopPropagation();
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      if (text && ws && ws.readyState === WebSocket.OPEN) ws.send(text);
     });
 
     connect();
